@@ -119,15 +119,11 @@ function sectionShellClass(section: HomePageSection) {
         accent: 'bg-[#fff7ed] text-slate-950',
     };
 
-    return (
-        classes[section.background as keyof typeof classes] || classes.white
-    );
+    return classes[section.background as keyof typeof classes] || classes.white;
 }
 
 function sectionEyebrowClass(section: HomePageSection) {
-    return section.background === 'dark'
-        ? 'text-amber-300'
-        : 'text-teal-700';
+    return section.background === 'dark' ? 'text-amber-300' : 'text-teal-700';
 }
 
 function sectionMutedClass(section: HomePageSection) {
@@ -267,9 +263,7 @@ onBeforeUnmount(() => {
                 class="sl-slider-image-link"
                 :href="activeSlide.target_url"
                 :target="activeSlide.opens_in_new_tab ? '_blank' : undefined"
-                :rel="
-                    activeSlide.opens_in_new_tab ? 'noreferrer' : undefined
-                "
+                :rel="activeSlide.opens_in_new_tab ? 'noreferrer' : undefined"
                 aria-label="Open hero slide"
             >
                 <img
@@ -377,9 +371,7 @@ onBeforeUnmount(() => {
                         <option value="learning-operations">
                             Learning Operations
                         </option>
-                        <option value="business-growth">
-                            Business Growth
-                        </option>
+                        <option value="business-growth">Business Growth</option>
                     </select>
                     <input
                         type="search"
@@ -405,12 +397,8 @@ onBeforeUnmount(() => {
                             <component :is="item.icon" class="h-5 w-5" />
                         </span>
                         <span>
-                            <span class="sl-stat-value">{{
-                                item.value
-                            }}</span>
-                            <span class="sl-stat-label">{{
-                                item.label
-                            }}</span>
+                            <span class="sl-stat-value">{{ item.value }}</span>
+                            <span class="sl-stat-label">{{ item.label }}</span>
                         </span>
                     </div>
                 </div>
@@ -488,7 +476,9 @@ onBeforeUnmount(() => {
                         <h3 class="mt-4 text-lg font-black text-slate-950">
                             {{ category.name }}
                         </h3>
-                        <p class="mt-2 line-clamp-3 text-sm leading-6 text-slate-600">
+                        <p
+                            class="mt-2 line-clamp-3 text-sm leading-6 text-slate-600"
+                        >
                             {{ category.description }}
                         </p>
                         <div
@@ -557,7 +547,8 @@ onBeforeUnmount(() => {
                     v-else
                     class="mt-9 rounded-md border border-dashed border-slate-300 bg-slate-50 p-8 text-slate-600"
                 >
-                    Published courses will appear here once the catalog is approved.
+                    Published courses will appear here once the catalog is
+                    approved.
                 </div>
             </div>
         </section>
@@ -814,7 +805,8 @@ onBeforeUnmount(() => {
                     v-else
                     class="rounded-md border border-dashed border-slate-300 bg-white p-8 text-slate-600"
                 >
-                    Published blog posts will appear here after editorial approval.
+                    Published blog posts will appear here after editorial
+                    approval.
                 </div>
             </div>
         </section>
@@ -1019,7 +1011,9 @@ onBeforeUnmount(() => {
                                 <div class="text-2xl font-black text-white">
                                     {{ metric.metric }}
                                 </div>
-                                <div class="mt-1 text-sm font-bold text-slate-300">
+                                <div
+                                    class="mt-1 text-sm font-bold text-slate-300"
+                                >
                                     {{ metric.label }}
                                 </div>
                             </div>

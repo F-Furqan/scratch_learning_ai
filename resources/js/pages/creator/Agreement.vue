@@ -34,7 +34,7 @@ defineOptions({
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <p
-                        class="inline-flex items-center gap-2 rounded-md bg-teal-100 px-3 py-1 text-xs font-semibold uppercase tracking-normal text-teal-800"
+                        class="inline-flex items-center gap-2 rounded-md bg-teal-100 px-3 py-1 text-xs font-semibold tracking-normal text-teal-800 uppercase"
                     >
                         <FileCheck2 class="h-4 w-4" />
                         Version {{ agreement.version }}

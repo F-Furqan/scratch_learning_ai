@@ -51,7 +51,9 @@ defineOptions({
             <div class="mb-5 grid gap-2 rounded-md bg-muted p-4 text-sm">
                 <p>
                     Status:
-                    <strong class="capitalize">{{ profile.status || 'pending' }}</strong>
+                    <strong class="capitalize">{{
+                        profile.status || 'pending'
+                    }}</strong>
                 </p>
                 <p v-if="profile.admin_notes" class="text-muted-foreground">
                     {{ profile.admin_notes }}

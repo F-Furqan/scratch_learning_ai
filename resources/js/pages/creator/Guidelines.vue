@@ -35,10 +35,12 @@ defineOptions({
                 <h1 class="mt-1 text-2xl font-semibold tracking-normal">
                     Content guidelines
                 </h1>
-                <p class="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-                    These rules protect students, creators, and Scratch Learning.
-                    Creator actions create requests or revisions; admin actions
-                    make publishing and deletion decisions.
+                <p
+                    class="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground"
+                >
+                    These rules protect students, creators, and Scratch
+                    Learning. Creator actions create requests or revisions;
+                    admin actions make publishing and deletion decisions.
                 </p>
             </div>
             <Link
@@ -59,29 +61,35 @@ defineOptions({
                     <ShieldCheck class="h-5 w-5 text-teal-700" />
                     <h2 class="text-base font-semibold">{{ section.title }}</h2>
                 </div>
-                <ul class="mt-4 grid gap-3 text-sm leading-6 text-muted-foreground">
+                <ul
+                    class="mt-4 grid gap-3 text-sm leading-6 text-muted-foreground"
+                >
                     <li
                         v-for="item in section.items"
                         :key="item"
                         class="flex gap-2"
                     >
-                        <BadgeCheck class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                        <BadgeCheck
+                            class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600"
+                        />
                         <span>{{ item }}</span>
                     </li>
                 </ul>
             </article>
         </section>
 
-        <section class="rounded-lg border border-amber-200 bg-amber-50 p-5 text-amber-950">
+        <section
+            class="rounded-lg border border-amber-200 bg-amber-50 p-5 text-amber-950"
+        >
             <div class="flex gap-3">
                 <FileCheck2 class="mt-0.5 h-5 w-5 text-amber-700" />
                 <div>
                     <h2 class="font-semibold">Required declaration</h2>
                     <p class="mt-1 text-sm leading-6">
                         Before submitting a blog, course, or major revision, you
-                        must confirm the work is original or properly licensed and
-                        that you understand false declarations may lead to removal
-                        or account action.
+                        must confirm the work is original or properly licensed
+                        and that you understand false declarations may lead to
+                        removal or account action.
                     </p>
                 </div>
             </div>

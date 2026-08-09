@@ -39,10 +39,7 @@ function dateLabel(value: string | null) {
 </script>
 
 <template>
-    <Link
-        :href="post.url"
-        class="sl-template-card group grid"
-    >
+    <Link :href="post.url" class="sl-template-card group grid">
         <div class="sl-card-image">
             <img
                 v-if="postImage"
@@ -87,9 +84,7 @@ function dateLabel(value: string | null) {
                     <CalendarDays class="h-3.5 w-3.5" />
                     {{ dateLabel(post.published_at) }}
                 </span>
-                <span
-                    class="inline-flex items-center gap-1.5 text-teal-700"
-                >
+                <span class="inline-flex items-center gap-1.5 text-teal-700">
                     <BadgeCheck class="h-3.5 w-3.5" />
                     Editorial approved
                 </span>

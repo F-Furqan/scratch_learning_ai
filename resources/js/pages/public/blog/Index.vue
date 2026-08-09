@@ -79,9 +79,7 @@ function submitFilters() {
                     class="rounded-md border border-white/15 bg-white/10 p-4 backdrop-blur"
                 >
                     <div class="text-3xl font-black">{{ posts.total }}</div>
-                    <div class="text-sm text-slate-300">
-                        Published articles
-                    </div>
+                    <div class="text-sm text-slate-300">Published articles</div>
                 </div>
                 <div
                     class="rounded-md border border-white/15 bg-white/10 p-4 backdrop-blur"
@@ -108,13 +106,13 @@ function submitFilters() {
                     <input
                         v-model="filterState.search"
                         type="search"
-                        class="h-12 w-full rounded-md border border-slate-300 bg-slate-50 pr-3 pl-10 text-sm font-semibold outline-none transition focus:border-amber-600 focus:bg-white"
+                        class="h-12 w-full rounded-md border border-slate-300 bg-slate-50 pr-3 pl-10 text-sm font-semibold transition outline-none focus:border-amber-600 focus:bg-white"
                         placeholder="Search articles"
                     />
                 </label>
                 <select
                     v-model="filterState.category"
-                    class="h-12 rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold outline-none transition focus:border-amber-600 focus:bg-white"
+                    class="h-12 rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold transition outline-none focus:border-amber-600 focus:bg-white"
                 >
                     <option value="">All categories</option>
                     <option

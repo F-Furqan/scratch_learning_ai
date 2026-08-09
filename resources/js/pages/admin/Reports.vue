@@ -254,7 +254,9 @@ function duration(seconds: number) {
                     </p>
                     <p class="mt-1 text-sm text-slate-500">
                         {{
-                            numberValue(props.reports.commerceRevenue.ordersCount)
+                            numberValue(
+                                props.reports.commerceRevenue.ordersCount,
+                            )
                         }}
                         orders
                     </p>
@@ -352,7 +354,8 @@ function duration(seconds: number) {
                             <p class="text-slate-500">Starts</p>
                             <strong class="text-lg text-slate-950">{{
                                 numberValue(
-                                    props.reports.studentEngagement.lessonStarts,
+                                    props.reports.studentEngagement
+                                        .lessonStarts,
                                 )
                             }}</strong>
                         </div>
@@ -378,7 +381,8 @@ function duration(seconds: number) {
                             <p class="text-slate-500">Watch time</p>
                             <strong class="text-lg text-slate-950">{{
                                 duration(
-                                    props.reports.studentEngagement.watchSeconds,
+                                    props.reports.studentEngagement
+                                        .watchSeconds,
                                 )
                             }}</strong>
                         </div>
@@ -463,9 +467,7 @@ function duration(seconds: number) {
                                 {{ stage.stageOrder }}
                             </div>
                             <div class="min-w-0">
-                                <p
-                                    class="truncate font-medium text-slate-900"
-                                >
+                                <p class="truncate font-medium text-slate-900">
                                     {{ stage.stage }}
                                 </p>
                                 <p class="text-slate-500">
@@ -691,8 +693,8 @@ function duration(seconds: number) {
                             </h3>
                             <div class="mt-3 grid gap-2">
                                 <div
-                                    v-for="plan in props.reports
-                                        .commerceRevenue.byPlan"
+                                    v-for="plan in props.reports.commerceRevenue
+                                        .byPlan"
                                     :key="plan.plan"
                                     class="flex items-center justify-between gap-3 text-sm"
                                 >
@@ -780,7 +782,9 @@ function duration(seconds: number) {
                                     <span class="text-slate-600">{{
                                         status.key
                                     }}</span>
-                                    <strong>{{ numberValue(status.count) }}</strong>
+                                    <strong>{{
+                                        numberValue(status.count)
+                                    }}</strong>
                                 </div>
                             </div>
                         </div>
@@ -798,7 +802,9 @@ function duration(seconds: number) {
                                     <span class="text-slate-600">{{
                                         type.key
                                     }}</span>
-                                    <strong>{{ numberValue(type.count) }}</strong>
+                                    <strong>{{
+                                        numberValue(type.count)
+                                    }}</strong>
                                 </div>
                             </div>
                         </div>

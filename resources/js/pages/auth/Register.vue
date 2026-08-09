@@ -11,14 +11,17 @@ import { Spinner } from '@/components/ui/spinner';
 import { login } from '@/routes';
 import { store } from '@/routes/register';
 
-const props = withDefaults(defineProps<{
-    accountType?: 'student' | 'creator';
-    creatorAgreementVersion?: string;
-    passwordRules: string;
-}>(), {
-    accountType: 'student',
-    creatorAgreementVersion: '2026-07-19',
-});
+const props = withDefaults(
+    defineProps<{
+        accountType?: 'student' | 'creator';
+        creatorAgreementVersion?: string;
+        passwordRules: string;
+    }>(),
+    {
+        accountType: 'student',
+        creatorAgreementVersion: '2026-07-19',
+    },
+);
 
 const isCreator = computed(() => props.accountType === 'creator');
 const title = computed(() =>

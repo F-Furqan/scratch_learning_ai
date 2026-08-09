@@ -22,9 +22,7 @@ const props = defineProps<{
     seo: SeoPayload;
 }>();
 
-const postImage = ref(
-    props.post.featured_image?.url || null,
-);
+const postImage = ref(props.post.featured_image?.url || null);
 
 function usePostFallback() {
     postImage.value = null;

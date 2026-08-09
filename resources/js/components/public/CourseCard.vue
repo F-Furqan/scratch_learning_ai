@@ -38,10 +38,7 @@ function useFallbackImage() {
 </script>
 
 <template>
-    <Link
-        :href="course.url"
-        class="sl-template-card group grid"
-    >
+    <Link :href="course.url" class="sl-template-card group grid">
         <div class="sl-card-image">
             <img
                 v-if="courseImage"
@@ -100,10 +97,7 @@ function useFallbackImage() {
                     <BookOpenCheck class="h-3.5 w-3.5 text-teal-700" />
                     {{ course.lesson_count }} lessons
                 </span>
-                <span
-                    v-if="course.level"
-                    class="capitalize"
-                >
+                <span v-if="course.level" class="capitalize">
                     <Signal class="h-3.5 w-3.5 text-orange-600" />
                     {{ course.level }}
                 </span>

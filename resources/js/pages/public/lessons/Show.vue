@@ -58,16 +58,18 @@ const progressPercent = computed(
 );
 
 const sectionLabel = computed(() => {
-    const section = props.lesson.section as
-        | { name?: string; title?: string }
-        | null;
+    const section = props.lesson.section as {
+        name?: string;
+        title?: string;
+    } | null;
 
     return section?.name || section?.title || 'Lesson';
 });
 
 const watchPoster = computed(
     () =>
-        props.course.thumbnail?.url || '/brand/scratch-learning-watch-poster.svg',
+        props.course.thumbnail?.url ||
+        '/brand/scratch-learning-watch-poster.svg',
 );
 
 const lessonIndex = computed(() => {
@@ -186,7 +188,9 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                             <h3>{{ course.title }}</h3>
 
                             <div class="mb-4">
-                                <p class="mb-1">{{ progressPercent }}% Complete</p>
+                                <p class="mb-1">
+                                    {{ progressPercent }}% Complete
+                                </p>
                                 <div
                                     class="progress progress-xs mb-2"
                                     role="progressbar"
@@ -196,7 +200,9 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                 >
                                     <div
                                         class="progress-bar bg-success"
-                                        :style="{ width: `${progressPercent}%` }"
+                                        :style="{
+                                            width: `${progressPercent}%`,
+                                        }"
                                     />
                                 </div>
                                 <span class="fw-medium">
@@ -210,7 +216,9 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                 id="accordionSpacingExample"
                             >
                                 <details
-                                    v-for="(section, sectionIndex) in course.sections"
+                                    v-for="(
+                                        section, sectionIndex
+                                    ) in course.sections"
                                     :key="section.id"
                                     class="accordion-item"
                                     :open="
@@ -230,10 +238,14 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                         </div>
                                     </summary>
 
-                                    <div class="accordion-collapse collapse show">
+                                    <div
+                                        class="accordion-collapse show collapse"
+                                    >
                                         <div class="accordion-body">
                                             <Link
-                                                v-for="(item, itemIndex) in section.lessons"
+                                                v-for="(
+                                                    item, itemIndex
+                                                ) in section.lessons"
                                                 :key="item.id"
                                                 :href="item.url"
                                                 class="sl-watch-lesson-row"
@@ -242,10 +254,14 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                                         item.id === lesson.id,
                                                 }"
                                             >
-                                                <div class="sl-watch-lesson-title">
+                                                <div
+                                                    class="sl-watch-lesson-title"
+                                                >
                                                     <span class="d-flex">
                                                         <PlayCircle
-                                                            v-if="!item.is_locked"
+                                                            v-if="
+                                                                !item.is_locked
+                                                            "
                                                             class="text-success fs-24 me-1 h-6 w-6"
                                                         />
                                                         <LockKeyhole
@@ -253,7 +269,9 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                                             class="text-warning fs-24 me-1 h-6 w-6"
                                                         />
                                                     </span>
-                                                    <p class="accordian-content mb-0">
+                                                    <p
+                                                        class="accordian-content mb-0"
+                                                    >
                                                         {{ item.title }}
                                                     </p>
                                                 </div>
@@ -360,7 +378,7 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                             </div>
 
                             <ul
-                                class="nav-tabs mb-4 nav-justified border-0 nav-style-1 d-sm-flex d-block"
+                                class="nav-tabs nav-justified nav-style-1 d-sm-flex d-block mb-4 border-0"
                                 role="tablist"
                             >
                                 <li
@@ -372,7 +390,9 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                     <button
                                         type="button"
                                         class="btn nav-link"
-                                        :class="{ active: activeTab === tab.id }"
+                                        :class="{
+                                            active: activeTab === tab.id,
+                                        }"
                                         @click="activeTab = tab.id"
                                     >
                                         {{ tab.label }}
@@ -408,11 +428,14 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                                 "
                                                 class="sl-drip-date"
                                             >
-                                                <CalendarClock class="h-4 w-4" />
+                                                <CalendarClock
+                                                    class="h-4 w-4"
+                                                />
                                                 Opens
                                                 {{
                                                     new Date(
-                                                        lesson.learning.drip.available_at,
+                                                        lesson.learning.drip
+                                                            .available_at,
                                                     ).toLocaleDateString()
                                                 }}
                                             </p>
@@ -448,7 +471,10 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                             <strong>{{ lesson.title }}</strong>
                                             in {{ sectionLabel }}.
                                         </p>
-                                        <Link :href="course.url" class="readmore-btn">
+                                        <Link
+                                            :href="course.url"
+                                            class="readmore-btn"
+                                        >
                                             Readmore
                                         </Link>
                                     </div>
@@ -501,7 +527,8 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                         v-if="
                                             !lesson.is_locked &&
                                             (lesson.learning.resources.length ||
-                                                lesson.learning.quizzes.length ||
+                                                lesson.learning.quizzes
+                                                    .length ||
                                                 lesson.learning.assignments
                                                     .length)
                                         "
@@ -518,8 +545,8 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                                 Resources
                                             </h6>
                                             <a
-                                                v-for="resource in lesson.learning
-                                                    .resources"
+                                                v-for="resource in lesson
+                                                    .learning.resources"
                                                 :key="resource.id"
                                                 :href="
                                                     resource.download_url ||
@@ -531,7 +558,9 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                         </section>
 
                                         <section
-                                            v-if="lesson.learning.quizzes.length"
+                                            v-if="
+                                                lesson.learning.quizzes.length
+                                            "
                                             class="sl-watch-mini-card"
                                         >
                                             <h6>
@@ -637,7 +666,9 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                                 :key="faq.id"
                                                 class="accordion-item"
                                             >
-                                                <summary class="accordion-button">
+                                                <summary
+                                                    class="accordion-button"
+                                                >
                                                     {{ faq.question }}
                                                 </summary>
                                                 <div class="accordion-body">
@@ -707,7 +738,8 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
 
                                         <div
                                             v-if="
-                                                lesson.community.questions.length
+                                                lesson.community.questions
+                                                    .length
                                             "
                                             class="sl-qna-list"
                                         >
@@ -764,8 +796,7 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                                     class="sl-answer-list"
                                                 >
                                                     <div
-                                                        v-for="answer in question
-                                                            .answers"
+                                                        v-for="answer in question.answers"
                                                         :key="answer.id"
                                                         class="sl-answer"
                                                         :class="{
@@ -776,7 +807,8 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                                         <div>
                                                             <strong>
                                                                 {{
-                                                                    answer.author
+                                                                    answer
+                                                                        .author
                                                                         ?.name ||
                                                                     'Member'
                                                                 }}

@@ -570,7 +570,8 @@ function workflowActionClass(action: WorkflowAction) {
                             <td class="px-3 py-3 align-top">
                                 <div class="flex flex-wrap justify-end gap-1">
                                     <button
-                                        v-for="action in row.workflow_actions || []"
+                                        v-for="action in row.workflow_actions ||
+                                        []"
                                         :key="action.url"
                                         type="button"
                                         class="h-8 rounded-md border px-2 text-xs font-semibold"
@@ -667,14 +668,16 @@ function workflowActionClass(action: WorkflowAction) {
             >
                 <div
                     v-if="editingRow?.review_items?.length"
-                    class="grid gap-3 rounded-md border bg-muted/30 p-3 lg:col-span-2 md:grid-cols-2"
+                    class="grid gap-3 rounded-md border bg-muted/30 p-3 md:grid-cols-2 lg:col-span-2"
                 >
                     <div
                         v-for="item in editingRow.review_items"
                         :key="item.label"
                         class="rounded-md border bg-background p-3"
                     >
-                        <p class="text-xs font-semibold uppercase text-muted-foreground">
+                        <p
+                            class="text-xs font-semibold text-muted-foreground uppercase"
+                        >
                             {{ item.label }}
                         </p>
                         <p class="mt-1 text-sm font-medium">

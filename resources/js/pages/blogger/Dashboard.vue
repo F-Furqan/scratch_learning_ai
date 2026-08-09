@@ -252,8 +252,8 @@ function money(cents: number, currency = 'USD') {
                 </div>
                 <p v-else class="text-sm text-muted-foreground">
                     Approved creators can receive profile exposure on their
-                    published blogs and courses. Direct creator payments are
-                    not enabled for this platform.
+                    published blogs and courses. Direct creator payments are not
+                    enabled for this platform.
                 </p>
 
                 <div class="mt-5 rounded-md bg-muted p-4 text-sm">

@@ -30,11 +30,11 @@ const props = defineProps<{
     seo: SeoPayload;
 }>();
 
-const courseImage = ref(
-    props.course.thumbnail?.url || null,
-);
+const courseImage = ref(props.course.thumbnail?.url || null);
 
-const firstLesson = computed(() => props.course.sections[0]?.lessons[0] || null);
+const firstLesson = computed(
+    () => props.course.sections[0]?.lessons[0] || null,
+);
 const lessonCount = computed(() =>
     props.course.sections.reduce(
         (total, section) => total + section.lessons.length,
@@ -122,7 +122,9 @@ function useCourseFallback() {
             <aside
                 class="h-fit overflow-hidden rounded-md border border-white/15 bg-white text-slate-950 shadow-[0_24px_70px_rgba(0,0,0,0.28)]"
             >
-                <div class="relative aspect-[16/10] overflow-hidden bg-slate-900">
+                <div
+                    class="relative aspect-[16/10] overflow-hidden bg-slate-900"
+                >
                     <img
                         v-if="courseImage"
                         :src="courseImage"

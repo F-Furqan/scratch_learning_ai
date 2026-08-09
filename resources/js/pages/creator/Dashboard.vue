@@ -152,7 +152,12 @@ defineOptions({
 });
 
 const stats = [
-    { label: 'Drafts', key: 'drafts', icon: FilePenLine, tone: 'text-slate-700' },
+    {
+        label: 'Drafts',
+        key: 'drafts',
+        icon: FilePenLine,
+        tone: 'text-slate-700',
+    },
     {
         label: 'Pending approval',
         key: 'pending_approval',
@@ -232,7 +237,11 @@ function markRead(alert: CreatorNotification) {
 }
 
 function markAllRead() {
-    router.patch('/creator/notifications/read-all', {}, { preserveScroll: true });
+    router.patch(
+        '/creator/notifications/read-all',
+        {},
+        { preserveScroll: true },
+    );
 }
 </script>
 
@@ -308,9 +317,12 @@ function markAllRead() {
                 <div class="flex items-start gap-3">
                     <Bell class="mt-0.5 h-5 w-5 text-teal-700" />
                     <div>
-                        <h2 class="text-base font-semibold">Dashboard alerts</h2>
+                        <h2 class="text-base font-semibold">
+                            Dashboard alerts
+                        </h2>
                         <p class="text-sm text-muted-foreground">
-                            {{ unread_notification_count }} unread creator updates.
+                            {{ unread_notification_count }} unread creator
+                            updates.
                         </p>
                     </div>
                 </div>
@@ -341,7 +353,7 @@ function markAllRead() {
                         </div>
                         <span
                             v-if="!alert.read_at"
-                            class="rounded-md bg-teal-700 px-2 py-1 text-xs font-semibold uppercase text-white"
+                            class="rounded-md bg-teal-700 px-2 py-1 text-xs font-semibold text-white uppercase"
                         >
                             New
                         </span>
@@ -352,7 +364,9 @@ function markAllRead() {
                     >
                         {{ alert.note }}
                     </p>
-                    <div class="mt-3 flex flex-wrap items-center gap-3 text-sm font-semibold">
+                    <div
+                        class="mt-3 flex flex-wrap items-center gap-3 text-sm font-semibold"
+                    >
                         <Link
                             v-if="alert.action_url"
                             :href="alert.action_url"
@@ -380,7 +394,11 @@ function markAllRead() {
                 class="rounded-lg border bg-card p-4"
             >
                 <div class="flex items-center gap-3">
-                    <component :is="stat.icon" class="h-5 w-5" :class="stat.tone" />
+                    <component
+                        :is="stat.icon"
+                        class="h-5 w-5"
+                        :class="stat.tone"
+                    />
                     <div>
                         <p class="text-2xl font-semibold">
                             {{ number(summary[stat.key]) }}
@@ -398,11 +416,14 @@ function markAllRead() {
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <h2 class="text-base font-semibold">
-                            {{ profile.instructor_display_name || profile.name }}
+                            {{
+                                profile.instructor_display_name || profile.name
+                            }}
                         </h2>
                         <p class="mt-1 text-sm text-muted-foreground">
                             Blogger: {{ profile.blogger_status || 'none' }} /
-                            Instructor: {{ profile.instructor_status || 'none' }}
+                            Instructor:
+                            {{ profile.instructor_status || 'none' }}
                         </p>
                     </div>
                     <span
@@ -414,7 +435,10 @@ function markAllRead() {
                     </span>
                 </div>
                 <p class="mt-4 text-sm leading-7 text-muted-foreground">
-                    {{ profile.bio || 'Add a bio so students know your expertise.' }}
+                    {{
+                        profile.bio ||
+                        'Add a bio so students know your expertise.'
+                    }}
                 </p>
                 <div class="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
                     <span
@@ -467,13 +491,17 @@ function markAllRead() {
                         <p class="text-xl font-semibold">
                             {{ number(analytics.course_views) }}
                         </p>
-                        <p class="text-xs text-muted-foreground">Course views</p>
+                        <p class="text-xs text-muted-foreground">
+                            Course views
+                        </p>
                     </div>
                     <div class="rounded-md border p-4">
                         <p class="text-xl font-semibold">
                             {{ number(analytics.lesson_views) }}
                         </p>
-                        <p class="text-xs text-muted-foreground">Lesson views</p>
+                        <p class="text-xs text-muted-foreground">
+                            Lesson views
+                        </p>
                     </div>
                     <div class="rounded-md border p-4">
                         <p class="text-xl font-semibold">
@@ -491,7 +519,9 @@ function markAllRead() {
                         <p class="text-xl font-semibold">
                             {{ number(analytics.engagement_score) }}
                         </p>
-                        <p class="text-xs text-muted-foreground">Engagement score</p>
+                        <p class="text-xs text-muted-foreground">
+                            Engagement score
+                        </p>
                     </div>
                 </div>
             </section>
@@ -499,10 +529,14 @@ function markAllRead() {
 
         <div class="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
             <section class="rounded-lg border bg-card p-5">
-                <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div
+                    class="mb-4 flex flex-wrap items-center justify-between gap-3"
+                >
                     <div class="flex items-center gap-2">
                         <BookOpenCheck class="h-5 w-5 text-teal-700" />
-                        <h2 class="text-base font-semibold">Published content status</h2>
+                        <h2 class="text-base font-semibold">
+                            Published content status
+                        </h2>
                     </div>
                     <div class="flex gap-2">
                         <Link
@@ -519,18 +553,24 @@ function markAllRead() {
                         </Link>
                     </div>
                 </div>
-                <div v-if="recent_content.length" class="divide-y rounded-md border">
+                <div
+                    v-if="recent_content.length"
+                    class="divide-y rounded-md border"
+                >
                     <div
                         v-for="content in recent_content"
                         :key="`${content.type}-${content.id}`"
                         class="grid gap-2 p-4"
                     >
-                        <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div
+                            class="flex flex-wrap items-start justify-between gap-3"
+                        >
                             <div>
                                 <p class="font-semibold">{{ content.title }}</p>
                                 <p class="text-sm text-muted-foreground">
-                                    {{ content.type }} / {{ content.category || 'Uncategorized' }}
-                                    / {{ content.engagement_label }}
+                                    {{ content.type }} /
+                                    {{ content.category || 'Uncategorized' }} /
+                                    {{ content.engagement_label }}
                                 </p>
                             </div>
                             <span
@@ -541,13 +581,20 @@ function markAllRead() {
                             </span>
                         </div>
                         <p
-                            v-if="content.rejection_reason || content.admin_notes"
+                            v-if="
+                                content.rejection_reason || content.admin_notes
+                            "
                             class="rounded-md bg-rose-50 p-3 text-sm text-rose-900"
                         >
-                            {{ content.rejection_reason || content.admin_notes }}
+                            {{
+                                content.rejection_reason || content.admin_notes
+                            }}
                         </p>
                         <div class="flex flex-wrap gap-3 text-sm font-semibold">
-                            <Link :href="content.manage_url" class="text-teal-700">
+                            <Link
+                                :href="content.manage_url"
+                                class="text-teal-700"
+                            >
                                 Manage
                             </Link>
                             <Link
@@ -609,10 +656,14 @@ function markAllRead() {
                         <div class="flex items-start justify-between gap-3">
                             <div>
                                 <p class="font-medium">
-                                    {{ request.content_title || 'Deleted content' }}
+                                    {{
+                                        request.content_title ||
+                                        'Deleted content'
+                                    }}
                                 </p>
                                 <p class="text-sm text-muted-foreground">
-                                    {{ request.content_type }} / {{ request.status }}
+                                    {{ request.content_type }} /
+                                    {{ request.status }}
                                 </p>
                             </div>
                             <span
@@ -645,7 +696,8 @@ function markAllRead() {
                     >
                         <p class="font-medium">{{ revision.title }}</p>
                         <p class="mt-1 text-sm text-muted-foreground">
-                            {{ revision.status }} / {{ revision.comments_count }}
+                            {{ revision.status }} /
+                            {{ revision.comments_count }}
                             reviewer comments
                         </p>
                     </div>

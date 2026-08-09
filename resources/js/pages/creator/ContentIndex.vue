@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { Form, Head, Link } from '@inertiajs/vue3';
-import { BookOpenCheck, Clock3, FilePenLine, RefreshCcw, Trash2 } from '@lucide/vue';
+import {
+    BookOpenCheck,
+    Clock3,
+    FilePenLine,
+    RefreshCcw,
+    Trash2,
+} from '@lucide/vue';
 import { computed } from 'vue';
 
 import { Button } from '@/components/ui/button';
@@ -33,7 +39,11 @@ type ContentItem = {
             created_at: string | null;
         } | null;
     } | null;
-    pending_delete_request: { id: number; reason: string | null; status: string | null } | null;
+    pending_delete_request: {
+        id: number;
+        reason: string | null;
+        status: string | null;
+    } | null;
     latest_approval: {
         decision: string;
         from_status: string | null;
@@ -88,7 +98,10 @@ defineOptions({
     },
 });
 
-const filterLinks = computed(() => [{ label: 'All', value: '' }, ...props.status_options]);
+const filterLinks = computed(() => [
+    { label: 'All', value: '' },
+    ...props.status_options,
+]);
 
 const stats = [
     { label: 'Drafts', key: 'drafts', icon: FilePenLine },
@@ -109,7 +122,11 @@ function statusClass(status: string | null) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (status === 'pending' || status === 'submitted' || status === 'approved') {
+    if (
+        status === 'pending' ||
+        status === 'submitted' ||
+        status === 'approved'
+    ) {
         return 'bg-amber-100 text-amber-900';
     }
 
@@ -192,7 +209,9 @@ function statusClass(status: string | null) {
                     :key="item.id"
                     class="grid gap-4 p-5"
                 >
-                    <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div
+                        class="flex flex-wrap items-start justify-between gap-3"
+                    >
                         <div>
                             <h2 class="font-semibold">{{ item.title }}</h2>
                             <p class="mt-1 text-sm text-muted-foreground">
@@ -223,7 +242,9 @@ function statusClass(status: string | null) {
                         class="rounded-md bg-muted p-4 text-sm"
                     >
                         <p class="font-semibold capitalize">
-                            {{ item.latest_approval.decision.replace('_', ' ') }}
+                            {{
+                                item.latest_approval.decision.replace('_', ' ')
+                            }}
                         </p>
                         <p class="mt-1 text-muted-foreground">
                             {{ item.latest_approval.from_status || 'new' }} to
@@ -239,7 +260,8 @@ function statusClass(status: string | null) {
                         class="rounded-md border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950"
                     >
                         <p class="font-semibold">
-                            Revision {{ item.active_revision.status || 'submitted' }}
+                            Revision
+                            {{ item.active_revision.status || 'submitted' }}
                         </p>
                         <p class="mt-1 text-teal-900">
                             {{ item.active_revision.title }}
@@ -257,7 +279,10 @@ function statusClass(status: string | null) {
                         class="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
                     >
                         Delete request pending:
-                        {{ item.pending_delete_request.reason || 'No reason provided.' }}
+                        {{
+                            item.pending_delete_request.reason ||
+                            'No reason provided.'
+                        }}
                     </div>
 
                     <div class="flex flex-wrap items-center gap-3">
@@ -285,7 +310,10 @@ function statusClass(status: string | null) {
                         </Form>
 
                         <Form
-                            v-if="item.delete_request_url && !item.pending_delete_request"
+                            v-if="
+                                item.delete_request_url &&
+                                !item.pending_delete_request
+                            "
                             :action="item.delete_request_url"
                             method="post"
                             v-slot="{ processing }"

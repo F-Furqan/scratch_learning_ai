@@ -75,9 +75,7 @@ function submitFilters() {
                     class="rounded-md border border-white/15 bg-white/10 p-4 backdrop-blur"
                 >
                     <div class="text-3xl font-black">{{ courses.total }}</div>
-                    <div class="text-sm text-slate-300">
-                        Published courses
-                    </div>
+                    <div class="text-sm text-slate-300">Published courses</div>
                 </div>
                 <div
                     class="rounded-md border border-white/15 bg-white/10 p-4 backdrop-blur"
@@ -99,10 +97,7 @@ function submitFilters() {
 
     <section class="bg-[#f7f8fb] py-10">
         <div class="sl-container">
-            <form
-                class="sl-filter-bar"
-                @submit.prevent="submitFilters"
-            >
+            <form class="sl-filter-bar" @submit.prevent="submitFilters">
                 <label class="relative block">
                     <Search
                         class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
@@ -114,9 +109,7 @@ function submitFilters() {
                         placeholder="Search courses"
                     />
                 </label>
-                <select
-                    v-model="filterState.category"
-                >
+                <select v-model="filterState.category">
                     <option value="">All categories</option>
                     <option
                         v-for="category in categories"
@@ -126,19 +119,13 @@ function submitFilters() {
                         {{ category.name }}
                     </option>
                 </select>
-                <select
-                    v-model="filterState.level"
-                    class="capitalize"
-                >
+                <select v-model="filterState.level" class="capitalize">
                     <option value="">All levels</option>
                     <option v-for="level in levels" :key="level" :value="level">
                         {{ level }}
                     </option>
                 </select>
-                <button
-                    type="submit"
-                    class="sl-btn sl-btn-primary"
-                >
+                <button type="submit" class="sl-btn sl-btn-primary">
                     <SlidersHorizontal class="h-4 w-4" />
                     Filter
                 </button>
@@ -156,10 +143,7 @@ function submitFilters() {
                 </p>
             </div>
 
-            <div
-                v-if="courses.data.length"
-                class="sl-grid-3 mt-6"
-            >
+            <div v-if="courses.data.length" class="sl-grid-3 mt-6">
                 <CourseCard
                     v-for="course in courses.data"
                     :key="course.id"
