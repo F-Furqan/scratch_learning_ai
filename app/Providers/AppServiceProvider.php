@@ -4,23 +4,39 @@ namespace App\Providers;
 
 use App\Contracts\Access\AdminAccessService;
 use App\Contracts\Navigation\DashboardDestinationResolver;
+use App\Contracts\Operations\ManagedSnapshotProvider;
 use App\Contracts\Payments\PaddleClient;
 use App\Enums\RoleName;
 use App\Models\User;
 use App\Services\Access\RoleBasedAdminAccessService;
 use App\Services\Navigation\RoleBasedDashboardDestinationResolver;
+use App\Services\Operations\ApplicationHealthCheck;
+use App\Services\Operations\BackupRetentionService;
+use App\Services\Operations\DatabaseBackupManager;
+use App\Services\Operations\DatabaseHealthCheck;
+use App\Services\Operations\ManagedSnapshotDriver;
+use App\Services\Operations\MySqlBackupDriver;
+use App\Services\Operations\OperationalAlertNotifier;
+use App\Services\Operations\PlatformHealthService;
+use App\Services\Operations\QueueHealthCheck;
+use App\Services\Operations\SQLiteBackupDriver;
+use App\Services\Operations\StorageHealthCheck;
+use App\Services\Operations\UnsupportedManagedSnapshotProvider;
 use App\Services\Payments\PaddleBillingClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Http\Request;
+use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use RuntimeException;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -32,6 +48,36 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(AdminAccessService::class, RoleBasedAdminAccessService::class);
         $this->app->bind(DashboardDestinationResolver::class, RoleBasedDashboardDestinationResolver::class);
         $this->app->bind(PaddleClient::class, PaddleBillingClient::class);
+        $this->app->bind(ManagedSnapshotProvider::class, function ($app): ManagedSnapshotProvider {
+            $provider = config('operations.backups.managed.provider', UnsupportedManagedSnapshotProvider::class);
+
+            if (! is_string($provider) || trim($provider) === '') {
+                $provider = UnsupportedManagedSnapshotProvider::class;
+            }
+
+            if (! is_a($provider, ManagedSnapshotProvider::class, true)) {
+                throw new RuntimeException('The configured managed snapshot provider must implement ManagedSnapshotProvider.');
+            }
+
+            return $app->make($provider);
+        });
+
+        $this->app->when([DatabaseBackupManager::class, BackupRetentionService::class])
+            ->needs('$drivers')
+            ->give(fn ($app): array => [
+                $app->make(SQLiteBackupDriver::class),
+                $app->make(MySqlBackupDriver::class),
+                $app->make(ManagedSnapshotDriver::class),
+            ]);
+
+        $this->app->when(PlatformHealthService::class)
+            ->needs('$checks')
+            ->give(fn ($app): array => [
+                $app->make(ApplicationHealthCheck::class),
+                $app->make(DatabaseHealthCheck::class),
+                $app->make(QueueHealthCheck::class),
+                $app->make(StorageHealthCheck::class),
+            ]);
     }
 
     /**
@@ -43,6 +89,7 @@ class AppServiceProvider extends ServiceProvider
         $this->configureAuthorization();
         $this->configureRateLimiting();
         $this->configureMonitoring();
+        $this->configureQueueFailureAlerts();
     }
 
     /**
@@ -114,6 +161,28 @@ class AppServiceProvider extends ServiceProvider
                 'connection' => $query->connectionName,
                 'sql' => $query->toRawSql(),
             ]);
+        });
+    }
+
+    /**
+     * Deliver an immediate alert while scheduled monitoring remains the fallback.
+     */
+    protected function configureQueueFailureAlerts(): void
+    {
+        Event::listen(JobFailed::class, function (JobFailed $event): void {
+            $uuid = $event->job->uuid() ?: hash('sha256', $event->job->getRawBody());
+
+            app(OperationalAlertNotifier::class)->notify(
+                'queue.job_failed.'.$uuid,
+                'Queue job failed',
+                'A queue job exhausted its configured attempts.',
+                [
+                    'connection' => $event->connectionName,
+                    'queue' => $event->job->getQueue(),
+                    'job' => $event->job->resolveName(),
+                    'exception' => $event->exception::class,
+                ],
+            );
         });
     }
 }

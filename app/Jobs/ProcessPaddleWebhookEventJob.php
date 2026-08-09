@@ -13,9 +13,14 @@ class ProcessPaddleWebhookEventJob implements ShouldQueue
 
     public int $tries = 5;
 
+    /** @var list<int> */
+    public array $backoff = [10, 30, 60, 120];
+
     public function __construct(
         public readonly int $eventId,
-    ) {}
+    ) {
+        $this->onQueue('payments');
+    }
 
     public function handle(PaddleWebhookProcessor $processor): void
     {

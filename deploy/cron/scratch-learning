@@ -1,0 +1,4 @@
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+* * * * * www-data cd /var/www/scratch-learning/current && /usr/bin/php artisan schedule:run --no-interaction >> /dev/null 2>&1

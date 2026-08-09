@@ -222,6 +222,41 @@ class CourseWorkflowTest extends TestCase
             );
     }
 
+    public function test_creator_submission_can_be_approved_by_admin_end_to_end(): void
+    {
+        $creator = $this->approvedCreator();
+        $admin = $this->admin();
+        $course = Course::factory()->create([
+            'created_by' => $creator->id,
+            'title' => 'Phase four approval course',
+            'status' => PublishStatus::Draft,
+        ]);
+        $section = CourseSection::factory()->create(['course_id' => $course->id]);
+        CourseLesson::factory()->create([
+            'course_id' => $course->id,
+            'course_section_id' => $section->id,
+        ]);
+
+        $this->actingAs($creator)
+            ->post(route('creator.courses.submit', $course), [
+                'copyright_declaration_accepted' => '1',
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('creator.courses.index', ['status' => PublishStatus::Pending->value], false));
+
+        $this->assertSame(PublishStatus::Pending, $course->fresh()->status);
+        $this->get(route('public.courses.show', $course->slug))->assertNotFound();
+
+        $this->actingAs($admin)
+            ->post(route('admin.course-workflow.courses.approve', $course), [
+                'note' => 'Ownership and curriculum verified in the focused workflow test.',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(PublishStatus::Published, $course->fresh()->status);
+        $this->get(route('public.courses.show', $course->slug))->assertOk();
+    }
+
     public function test_admin_course_table_exposes_course_workflow_actions(): void
     {
         $admin = $this->admin();

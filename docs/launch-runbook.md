@@ -1,5 +1,7 @@
 # Launch Hardening Runbook
 
+See [Operations Runbook](operations-runbook.md) for the exact Supervisor, cron, storage permission, validation, deployment, health-check, and rollback commands.
+
 ## Release Checklist
 
 - Run `php artisan migrate --force` after a verified backup.
@@ -11,15 +13,22 @@
 
 ## Backups
 
-- Local SQLite installs can run `php artisan platform:backup`.
-- Production databases should use managed snapshots or engine-native dumps before each deploy.
-- Keep `BACKUPS_ENABLED=true`, choose a durable `BACKUP_DISK`, and set `BACKUP_RETENTION_DAYS` to the compliance window.
-- Verify restoration in staging before launch, not during an incident.
+- Backups are disabled by default. Keep `BACKUPS_ENABLED=false` until `php artisan platform:backup --dry-run` resolves the intended connection, private disk, path, and driver.
+- Local SQLite and MySQL installs can run `php artisan platform:backup`; MySQL requires the `mysqldump` and `mysql` client binaries.
+- Run `php artisan platform:backup --verify` before enabling the schedule. For MySQL this restores into `BACKUP_VERIFY_DATABASE`, which must be separate from the source and end in `restore-test`, then removes that disposable database.
+- MySQL credentials are passed to child processes through their environment and are never included in command arguments or console output. Dumps use a single transaction and include routines, triggers, and events.
+- Backup files are gzip-compressed, SHA-256 checksummed, and stored on `BACKUP_DISK`. The disk must be private and must not resolve inside `public/`.
+- Set `BACKUP_FAILURE_MAIL_TO` to one or more comma-separated operations addresses. Failures are also written to the monitoring log and `audit_logs` when the database remains reachable.
+- Production providers can bind their own `ManagedSnapshotProvider` implementation and set `BACKUP_DRIVER=managed` plus `BACKUP_MANAGED_PROVIDER` to that class.
+- After a successful manual restore check, set `BACKUPS_ENABLED=true` and choose `BACKUP_RETENTION_DAYS` according to the recovery and compliance policy.
 
 ## Queues And Scheduler
 
 - Required scheduled tasks:
+  - `operations.queue-heartbeat` every minute.
+  - `platform.monitor` every minute.
   - `ads.aggregate-reports` hourly.
+  - `queue.prune-failed` daily at 03:00.
   - `platform.backup` daily at 02:10 when backups are enabled.
 - Queue workers should run with a process monitor and restart on deploy.
 - Failed jobs must be reviewed from `failed_jobs` before each release.

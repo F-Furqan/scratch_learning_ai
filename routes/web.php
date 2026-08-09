@@ -22,6 +22,7 @@ use App\Http\Controllers\Growth\AbExperimentController;
 use App\Http\Controllers\Growth\AffiliateRedirectController;
 use App\Http\Controllers\Growth\CheckoutRecoveryController;
 use App\Http\Controllers\Growth\LeadMagnetSubmissionController;
+use App\Http\Controllers\OperationalHealthController;
 use App\Http\Controllers\Payments\PaymentCheckoutController;
 use App\Http\Controllers\Public\BlogController;
 use App\Http\Controllers\Public\BloggerProfileController;
@@ -50,6 +51,8 @@ use App\Http\Controllers\Student\StudentLessonQuestionController;
 use App\Http\Controllers\Student\StudentQuizAttemptController;
 use App\Http\Controllers\Student\StudentResourceDownloadController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('health', OperationalHealthController::class)->name('health');
 
 Route::middleware('throttle:public-content')->group(function (): void {
     Route::get('/', HomeController::class)->name('home');

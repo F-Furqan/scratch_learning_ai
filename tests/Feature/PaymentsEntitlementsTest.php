@@ -7,6 +7,7 @@ use App\Enums\PaymentEntitlementStatus;
 use App\Enums\PaymentEntitlementType;
 use App\Enums\PaymentProductType;
 use App\Enums\RoleName;
+use App\Jobs\ProcessPaddleWebhookEventJob;
 use App\Models\AuditLog;
 use App\Models\Course;
 use App\Models\CourseLesson;
@@ -24,11 +25,13 @@ use App\Models\TeamAccount;
 use App\Models\TeamSeat;
 use App\Models\User;
 use App\Services\Payments\CourseAccessService;
+use App\Services\Payments\PaddleWebhookProcessor;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -166,6 +169,53 @@ class PaymentsEntitlementsTest extends TestCase
                 ->where('lesson.is_locked', false)
                 ->where('lesson.content', 'Paid lesson body.'),
             );
+    }
+
+    public function test_valid_paddle_webhook_is_queued_once_and_processed_by_the_job(): void
+    {
+        Queue::fake();
+
+        $payload = [
+            'event_id' => 'evt_01queuedphase4',
+            'event_type' => 'notification.test',
+            'occurred_at' => now()->toISOString(),
+            'data' => [
+                'id' => 'ntf_01queuedphase4',
+            ],
+        ];
+
+        $this->postPaddleWebhook($payload)
+            ->assertOk()
+            ->assertJsonPath('data.duplicate', false);
+        $this->postPaddleWebhook($payload)
+            ->assertOk()
+            ->assertJsonPath('data.duplicate', true);
+
+        $event = PaymentWebhookEvent::query()
+            ->where('event_id', 'evt_01queuedphase4')
+            ->sole();
+
+        Queue::assertPushed(
+            ProcessPaddleWebhookEventJob::class,
+            fn (ProcessPaddleWebhookEventJob $job): bool => $job->eventId === $event->id
+                && $job->queue === 'payments',
+        );
+        Queue::assertPushedTimes(ProcessPaddleWebhookEventJob::class, 1);
+        $this->assertSame('accepted', $event->status);
+
+        (new ProcessPaddleWebhookEventJob($event->id))
+            ->handle(app(PaddleWebhookProcessor::class));
+
+        $event->refresh();
+
+        $this->assertSame('processed', $event->status);
+        $this->assertSame(1, $event->attempts);
+        $this->assertNotNull($event->processed_at);
+        $this->assertDatabaseHas(PaymentReconciliationRecord::class, [
+            'event_id' => 'evt_01queuedphase4',
+            'record_type' => 'webhook',
+            'status' => 'skipped',
+        ]);
     }
 
     public function test_team_subscription_webhook_grants_team_seats_and_premium_access(): void
