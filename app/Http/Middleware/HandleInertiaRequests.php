@@ -2,11 +2,18 @@
 
 namespace App\Http\Middleware;
 
+use App\Contracts\Access\AdminAccessService;
+use App\Contracts\Navigation\DashboardDestinationResolver;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
+    public function __construct(
+        private readonly AdminAccessService $adminAccess,
+        private readonly DashboardDestinationResolver $dashboardDestinations,
+    ) {}
+
     /**
      * The root template that's loaded on the first page visit.
      *
@@ -35,11 +42,29 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user ? [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'avatar' => null,
+                    'email_verified_at' => $user->email_verified_at?->toISOString(),
+                    'status' => $user->status->value,
+                    'roles' => $user->getRoleNames()->values(),
+                    'permissions' => $user->getAllPermissions()->pluck('name')->values(),
+                    'primaryRole' => $user->getRoleNames()->first(),
+                    'canAccessAdmin' => $this->adminAccess->canAccess($user),
+                    'dashboardUrl' => $this->dashboardDestinations->pathFor($user),
+                    'bloggerStatus' => $user->bloggerProfile?->status?->value,
+                    'two_factor_enabled' => filled($user->two_factor_secret) && filled($user->two_factor_confirmed_at),
+                    'created_at' => $user->created_at?->toISOString(),
+                    'updated_at' => $user->updated_at?->toISOString(),
+                ] : null,
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

@@ -68,7 +68,9 @@ class FortifyServiceProvider extends ServiceProvider
         ]));
 
         Fortify::registerView(fn () => Inertia::render('auth/Register', [
+            'accountType' => 'student',
             'passwordRules' => Password::defaults()->toPasswordRulesString(),
+            'creatorAgreementVersion' => config('platform.creator_agreement.version'),
         ]));
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('auth/TwoFactorChallenge'));

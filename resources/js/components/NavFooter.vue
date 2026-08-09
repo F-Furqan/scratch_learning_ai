@@ -19,6 +19,7 @@ defineProps<Props>();
 
 <template>
     <SidebarGroup
+        v-if="items.length"
         :class="`group-data-[collapsible=icon]:p-0 ${$props.class || ''}`"
     >
         <SidebarGroupContent>
