@@ -1,0 +1,62 @@
+<svg width="1440" height="810" viewBox="0 0 1440 810" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1440" height="810" fill="#111827"/>
+  <path d="M0 0H1440V810H0V0Z" fill="url(#bg)"/>
+  <path d="M0 553C199 478 358 470 537 523C772 592 1014 607 1440 430V810H0V553Z" fill="#182235" opacity=".92"/>
+  <path d="M1096 104C1238 104 1353 219 1353 361C1353 503 1238 618 1096 618C954 618 839 503 839 361C839 219 954 104 1096 104Z" fill="url(#ring)" opacity=".42"/>
+  <path d="M1096 164C1205 164 1293 252 1293 361C1293 470 1205 558 1096 558C987 558 899 470 899 361C899 252 987 164 1096 164Z" stroke="#FF4667" stroke-width="3" stroke-dasharray="14 18" opacity=".55"/>
+  <g filter="url(#shadow)">
+    <rect x="106" y="118" width="678" height="438" rx="34" fill="#F8FAFC"/>
+    <rect x="136" y="151" width="618" height="64" rx="18" fill="#111827"/>
+    <circle cx="173" cy="183" r="9" fill="#FF4667"/>
+    <circle cx="202" cy="183" r="9" fill="#FFB54A"/>
+    <circle cx="231" cy="183" r="9" fill="#21C55D"/>
+    <rect x="157" y="250" width="236" height="206" rx="24" fill="url(#cardA)"/>
+    <rect x="425" y="250" width="286" height="60" rx="14" fill="#EEF2F7"/>
+    <rect x="425" y="334" width="286" height="25" rx="12.5" fill="#DCE3EE"/>
+    <rect x="425" y="382" width="224" height="25" rx="12.5" fill="#DCE3EE"/>
+    <rect x="425" y="430" width="260" height="25" rx="12.5" fill="#DCE3EE"/>
+    <path d="M223 392L281 305L337 392H223Z" fill="#FFFFFF" opacity=".86"/>
+    <circle cx="246" cy="312" r="34" fill="#FFFFFF" opacity=".7"/>
+  </g>
+  <g filter="url(#shadowSmall)">
+    <rect x="715" y="455" width="434" height="178" rx="28" fill="#FFFFFF"/>
+    <rect x="753" y="495" width="142" height="22" rx="11" fill="#FF4667"/>
+    <rect x="753" y="539" width="335" height="18" rx="9" fill="#DCE3EE"/>
+    <rect x="753" y="577" width="274" height="18" rx="9" fill="#DCE3EE"/>
+    <circle cx="1073" cy="543" r="44" fill="#111827"/>
+    <path d="M1061 521L1099 543L1061 565V521Z" fill="#FFFFFF"/>
+  </g>
+  <g filter="url(#shadowSmall)">
+    <rect x="876" y="227" width="368" height="104" rx="24" fill="#FFFFFF" opacity=".96"/>
+    <rect x="914" y="264" width="215" height="16" rx="8" fill="#DCE3EE"/>
+    <rect x="914" y="294" width="146" height="16" rx="8" fill="#DCE3EE"/>
+    <circle cx="1177" cy="279" r="33" fill="#FFB54A"/>
+    <path d="M1162 280L1174 292L1194 266" stroke="#111827" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <path d="M164 666H546" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" opacity=".22"/>
+  <path d="M164 705H413" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" opacity=".16"/>
+  <text x="164" y="647" fill="#FFFFFF" font-family="Inter, Arial, sans-serif" font-size="50" font-weight="800" letter-spacing="0">Scratch Learning Studio</text>
+  <text x="164" y="742" fill="#CBD5E1" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="600" letter-spacing="0">Structured lessons, progress, notes, Q&amp;A, and protected learning access.</text>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1440" y1="0" y2="810" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1E293B"/>
+      <stop offset=".52" stop-color="#111827"/>
+      <stop offset="1" stop-color="#392C7D"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="839" x2="1353" y1="104" y2="618" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF4667"/>
+      <stop offset=".5" stop-color="#FFB54A"/>
+      <stop offset="1" stop-color="#4F46E5"/>
+    </linearGradient>
+    <linearGradient id="cardA" x1="157" x2="393" y1="250" y2="456" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF4667"/>
+      <stop offset="1" stop-color="#392C7D"/>
+    </linearGradient>
+    <filter id="shadow" x="76" y="90" width="738" height="500" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#000000" flood-opacity=".22"/>
+    </filter>
+    <filter id="shadowSmall" x="685" y="197" width="589" height="466" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000000" flood-opacity=".20"/>
+    </filter>
+  </defs>
+</svg>
