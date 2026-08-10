@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Enums\PermissionName;
 use App\Enums\RoleName;
 use Illuminate\Database\Seeder;
+use Modules\Admin\Registry\AdminResourceRegistry;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -18,7 +19,12 @@ class RolesAndPermissionsSeeder extends Seeder
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        foreach (PermissionName::values() as $permission) {
+        $permissionNames = array_values(array_unique([
+            ...PermissionName::values(),
+            ...app(AdminResourceRegistry::class)->permissionNames(),
+        ]));
+
+        foreach ($permissionNames as $permission) {
             Permission::findOrCreate($permission, 'web');
         }
 
@@ -30,20 +36,11 @@ class RolesAndPermissionsSeeder extends Seeder
 
         $permissions = Permission::query()
             ->where('guard_name', 'web')
-            ->whereIn('name', PermissionName::values())
+            ->whereIn('name', $permissionNames)
             ->get();
 
         Role::findByName(RoleName::SuperAdmin->value, 'web')
             ->syncPermissions($permissions);
-
-        Role::findByName(RoleName::SubAdmin->value, 'web')
-            ->syncPermissions([]);
-
-        Role::findByName(RoleName::Blogger->value, 'web')
-            ->syncPermissions([]);
-
-        Role::findByName(RoleName::Student->value, 'web')
-            ->syncPermissions([]);
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }

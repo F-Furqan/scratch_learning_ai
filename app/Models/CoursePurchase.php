@@ -40,6 +40,14 @@ class CoursePurchase extends Model
         return $this->belongsTo(Course::class);
     }
 
+    /**
+     * @return BelongsTo<PaymentOrder, $this>
+     */
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(PaymentOrder::class, 'payment_order_id');
+    }
+
     public function isActive(): bool
     {
         $expiresAt = $this->getAttribute('expires_at');

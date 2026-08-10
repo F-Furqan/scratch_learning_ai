@@ -19,6 +19,7 @@ import {
 } from '@lucide/vue';
 import { computed, reactive, ref } from 'vue';
 
+import RichContent from '@/components/public/RichContent.vue';
 import SeoHead from '@/components/public/SeoHead.vue';
 
 import type { CourseDetail, LessonDetail, SeoPayload } from '@/types';
@@ -446,9 +447,12 @@ function postAction(url: string | null, payload: Record<string, string> = {}) {
                                         <h6 class="fs-18 fw-semibold mb-1">
                                             About this course
                                         </h6>
-                                        <p>
+                                        <RichContent
+                                            v-if="lesson.content"
+                                            :html="lesson.content"
+                                        />
+                                        <p v-else>
                                             {{
-                                                lesson.content ||
                                                 lesson.preview ||
                                                 course.short_description ||
                                                 'This lesson is being prepared by the editorial team.'

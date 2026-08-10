@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable([
     'course_category_id',
@@ -31,7 +32,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class CourseSubcategory extends Model
 {
     /** @use HasFactory<CourseSubcategoryFactory> */
-    use HasFactory, HasSeoFields, HasUniqueSlug;
+    use HasFactory, HasSeoFields, HasUniqueSlug, SoftDeletes;
 
     /**
      * @return BelongsTo<CourseCategory, $this>
@@ -66,6 +67,7 @@ class CourseSubcategory extends Model
     {
         return [
             'is_active' => 'boolean',
+            'sort_order' => 'integer',
             'schema' => 'array',
         ];
     }

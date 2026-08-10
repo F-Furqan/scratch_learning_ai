@@ -9,11 +9,28 @@ use Illuminate\Support\Facades\Notification;
 
 class OperationalAlertNotifier
 {
+    public function __construct(private readonly OperationalAlertStore $alerts) {}
+
     /**
      * @param  array<string, bool|float|int|string|null>  $context
      */
-    public function notify(string $key, string $title, string $message, array $context = []): void
-    {
+    public function notify(
+        string $key,
+        string $title,
+        string $message,
+        array $context = [],
+        string $source = 'runtime',
+        string $severity = 'critical',
+    ): void {
+        try {
+            $this->alerts->record($key, $title, $message, $context, $source, $severity);
+        } catch (\Throwable $exception) {
+            Log::channel('monitoring')->warning('Unable to persist operational alert state.', [
+                'alert_key' => $key,
+                'exception' => $exception::class,
+            ]);
+        }
+
         Log::channel('monitoring')->error($title, [
             'alert_key' => $key,
             'message' => $message,

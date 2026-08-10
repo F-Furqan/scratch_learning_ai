@@ -12,6 +12,7 @@ use App\Models\EditorialRevision;
 use App\Models\User;
 use App\Services\Admin\ApprovalRecorder;
 use App\Services\Content\BlogWorkflowService;
+use App\Support\Security\ContentSanitizer;
 use BackedEnum;
 use Carbon\CarbonInterface;
 use Illuminate\Http\RedirectResponse;
@@ -23,6 +24,8 @@ use Inertia\Response;
 
 class CreatorBlogController extends Controller
 {
+    public function __construct(private readonly ContentSanitizer $contentSanitizer) {}
+
     public function index(Request $request): Response
     {
         /** @var User $user */
@@ -279,7 +282,7 @@ class CreatorBlogController extends Controller
      */
     private function validatePost(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'blog_category_id' => ['nullable', Rule::exists('blog_categories', 'id')],
             'title' => ['required', 'string', 'max:255'],
             'excerpt' => ['nullable', 'string', 'max:1000'],
@@ -287,6 +290,9 @@ class CreatorBlogController extends Controller
             'seo_title' => ['nullable', 'string', 'max:255'],
             'seo_description' => ['nullable', 'string', 'max:500'],
         ]);
+        $data['content'] = $this->contentSanitizer->richText($data['content']);
+
+        return $data;
     }
 
     private function recordCopyrightDeclaration(Request $request, BlogPost $post): void

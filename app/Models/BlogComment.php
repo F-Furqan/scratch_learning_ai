@@ -33,6 +33,14 @@ class BlogComment extends Model
     }
 
     /**
+     * @return BelongsTo<self, $this>
+     */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_id');
+    }
+
+    /**
      * @return HasMany<self, $this>
      */
     public function replies(): HasMany

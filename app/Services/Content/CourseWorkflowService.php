@@ -192,7 +192,13 @@ class CourseWorkflowService
     {
         $this->ensureStatus($course, PublishStatus::Pending, 'Only submitted courses can receive change requests.');
 
-        $course = $this->rejectLike($request, $course, 'changes_requested', $note);
+        $course = $this->transitionCourse(
+            $request,
+            $course,
+            PublishStatus::ChangesRequested,
+            'changes_requested',
+            $note,
+        );
 
         $this->notifications->courseChangesRequested($course, $note);
 

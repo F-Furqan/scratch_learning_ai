@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { FileText, Sparkles } from '@lucide/vue';
 
+import RichContent from '@/components/public/RichContent.vue';
 import SeoHead from '@/components/public/SeoHead.vue';
 
 import type { CmsPage, SeoPayload } from '@/types';
@@ -45,12 +46,11 @@ defineProps<{
 
         <section class="bg-white py-12">
             <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-                <div
+                <RichContent
                     v-if="page.content"
                     class="rounded-md border border-slate-200 bg-white p-6 text-base leading-8 whitespace-pre-line text-slate-700 shadow-[0_16px_45px_rgba(15,23,42,0.06)]"
-                >
-                    {{ page.content }}
-                </div>
+                    :html="page.content"
+                />
 
                 <div v-if="page.blocks.length" class="mt-8 grid gap-5">
                     <section
@@ -71,12 +71,11 @@ defineProps<{
                                 >
                                     {{ block.title }}
                                 </h2>
-                                <div
+                                <RichContent
                                     v-if="block.body"
                                     class="mt-3 leading-8 whitespace-pre-line text-slate-700"
-                                >
-                                    {{ block.body }}
-                                </div>
+                                    :html="block.body"
+                                />
                             </div>
                         </div>
                     </section>

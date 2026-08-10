@@ -1,13 +1,25 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Check, Pencil, Plus, Search, Trash2, X } from '@lucide/vue';
-import { computed, nextTick, reactive, ref } from 'vue';
+import {
+    Check,
+    Download,
+    GripVertical,
+    Pencil,
+    Plus,
+    Search,
+    Trash2,
+    X,
+} from '@lucide/vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import AdminMediaPicker from '@/components/admin/AdminMediaPicker.vue';
+import MultiSelectPicker from '@/components/admin/MultiSelectPicker.vue';
+import RichTextEditor from '@/components/admin/RichTextEditor.vue';
 
 type Option = {
     label: string;
     value: string | number;
     url?: string | null;
+    parentValue?: string | number;
 };
 
 type MediaAssetOption = {
@@ -22,6 +34,12 @@ type Field = {
     type: string;
     options: Option[];
     required: boolean;
+    dependsOn?: string;
+    optionsUrl?: string;
+    inlineCreate?: {
+        label: string;
+        url: string;
+    };
 };
 
 type Column = {
@@ -42,7 +60,7 @@ type WorkflowAction = {
     label: string;
     url: string;
     tone: 'success' | 'warning' | 'danger' | string;
-    method?: 'post' | 'delete';
+    method?: 'get' | 'post' | 'delete';
 };
 
 type ReviewItem = {
@@ -83,6 +101,11 @@ type BulkAction = {
 
 type FormValue = string | number | boolean | null | Array<string | number>;
 
+type Ordering = {
+    enabled: boolean;
+    url: string | null;
+};
+
 const props = defineProps<{
     resource: string;
     title: string;
@@ -98,12 +121,30 @@ const props = defineProps<{
     canCreate?: boolean;
     canEdit?: boolean;
     canDelete?: boolean;
+    exportUrl?: string | null;
+    ordering?: Ordering;
 }>();
 
 const editingRow = ref<AdminRow | null>(null);
 const formOpen = ref(false);
 const formPanel = ref<HTMLElement | null>(null);
 const selectedIds = ref<Array<number | string>>([]);
+const displayRows = ref<AdminRow[]>([...props.rows.data]);
+const draggedId = ref<number | string | null>(null);
+const orderingError = ref('');
+const dynamicOptions = reactive<Record<string, Option[]>>(
+    Object.fromEntries(
+        props.fields.map((field) => [field.key, [...field.options]]),
+    ),
+);
+const inlineCreateField = ref<string | null>(null);
+const inlineCreate = reactive({
+    name: '',
+    description: '',
+    is_active: true,
+    processing: false,
+    error: '',
+});
 
 const filterState = reactive<Record<string, string>>({
     search: props.filterValues.search || '',
@@ -127,14 +168,33 @@ const selectedBulkAction = computed(() =>
 
 const allVisibleSelected = computed(
     () =>
-        props.rows.data.length > 0 &&
-        props.rows.data.every((row) => selectedIds.value.includes(row.id)),
+        displayRows.value.length > 0 &&
+        displayRows.value.every((row) => selectedIds.value.includes(row.id)),
 );
 
 const metricEntries = computed(() => Object.entries(props.metrics));
 const canCreate = computed(() => props.canCreate ?? true);
 const canEdit = computed(() => props.canEdit ?? true);
 const canDelete = computed(() => props.canDelete ?? true);
+const canReorder = computed(() =>
+    Boolean(props.ordering?.enabled && props.ordering.url),
+);
+
+watch(
+    () => props.rows.data,
+    (rows) => {
+        displayRows.value = [...rows];
+    },
+);
+
+watch(
+    () => props.fields,
+    (fields) => {
+        fields.forEach((field) => {
+            dynamicOptions[field.key] = [...field.options];
+        });
+    },
+);
 
 function buildDefaults() {
     return props.fields.reduce<Record<string, FormValue>>((defaults, field) => {
@@ -166,6 +226,7 @@ function resetForm(values: Record<string, unknown> = {}) {
         form[field.key] = normalizeValue(field, values[field.key]);
     });
     form.clearErrors();
+    void hydrateDependentOptions();
 }
 
 function openCreate() {
@@ -212,12 +273,22 @@ function submitForm() {
 }
 
 function deleteRow(row: AdminRow) {
+    if (!window.confirm('Delete this record?')) {
+        return;
+    }
+
     router.delete(`${props.basePath}/${row.id}`, {
         preserveScroll: true,
     });
 }
 
 function runWorkflowAction(action: WorkflowAction) {
+    if (action.method === 'get') {
+        router.visit(action.url);
+
+        return;
+    }
+
     if (action.method === 'delete') {
         router.delete(action.url, {
             preserveScroll: true,
@@ -260,7 +331,7 @@ function resetFilters() {
 function toggleAllVisible() {
     if (allVisibleSelected.value) {
         selectedIds.value = selectedIds.value.filter(
-            (id) => !props.rows.data.some((row) => row.id === id),
+            (id) => !displayRows.value.some((row) => row.id === id),
         );
 
         return;
@@ -269,7 +340,7 @@ function toggleAllVisible() {
     selectedIds.value = Array.from(
         new Set([
             ...selectedIds.value,
-            ...props.rows.data.map((row) => row.id),
+            ...displayRows.value.map((row) => row.id),
         ]),
     );
 }
@@ -325,18 +396,235 @@ function setFormValue(key: string, value: FormValue) {
     form[key] = value;
 }
 
+function optionsFor(field: Field) {
+    const options = dynamicOptions[field.key] || field.options;
+
+    if (!field.dependsOn) {
+        return options;
+    }
+
+    const parentValue = form[field.dependsOn];
+
+    if (parentValue === null || parentValue === '') {
+        return [];
+    }
+
+    return options.filter(
+        (option) =>
+            option.parentValue === undefined ||
+            String(option.parentValue) === String(parentValue),
+    );
+}
+
+function handleSelectChange(field: Field, event: Event) {
+    setFormValue(field.key, inputValue(event));
+
+    props.fields
+        .filter((candidate) => candidate.dependsOn === field.key)
+        .forEach((dependent) => {
+            form[dependent.key] = null;
+            void loadDependentOptions(dependent);
+        });
+}
+
+async function hydrateDependentOptions() {
+    await Promise.all(
+        props.fields
+            .filter((field) => field.dependsOn && field.optionsUrl)
+            .map((field) => loadDependentOptions(field, true)),
+    );
+}
+
+async function loadDependentOptions(field: Field, preserveValue = false) {
+    if (!field.dependsOn || !field.optionsUrl) {
+        return;
+    }
+
+    const parentValue = form[field.dependsOn];
+
+    if (parentValue === null || parentValue === '') {
+        dynamicOptions[field.key] = [];
+        form[field.key] = null;
+
+        return;
+    }
+
+    const previousValue = form[field.key];
+    const url = field.optionsUrl.replace('{value}', String(parentValue));
+
+    try {
+        const response = await fetch(url, {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+        });
+        const payload = (await response.json()) as { data?: Option[] };
+
+        if (!response.ok) {
+            throw new Error('Unable to load options.');
+        }
+
+        dynamicOptions[field.key] = payload.data || [];
+
+        if (
+            !preserveValue ||
+            !dynamicOptions[field.key].some(
+                (option) => String(option.value) === String(previousValue),
+            )
+        ) {
+            form[field.key] = null;
+        }
+    } catch {
+        dynamicOptions[field.key] = field.options.filter(
+            (option) => String(option.parentValue) === String(parentValue),
+        );
+    }
+}
+
+function toggleInlineCreate(field: Field) {
+    inlineCreateField.value =
+        inlineCreateField.value === field.key ? null : field.key;
+    inlineCreate.name = '';
+    inlineCreate.description = '';
+    inlineCreate.is_active = true;
+    inlineCreate.error = '';
+}
+
+async function submitInlineCreate(field: Field) {
+    if (!field.inlineCreate || inlineCreate.processing) {
+        return;
+    }
+
+    inlineCreate.processing = true;
+    inlineCreate.error = '';
+
+    try {
+        const response = await fetch(field.inlineCreate.url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken(),
+            },
+            body: JSON.stringify({
+                name: inlineCreate.name,
+                description: inlineCreate.description || null,
+                is_active: inlineCreate.is_active,
+            }),
+        });
+        const payload = (await response.json()) as {
+            data?: Option;
+            message?: string;
+            errors?: Record<string, string[]>;
+        };
+
+        if (!response.ok || !payload.data) {
+            throw new Error(
+                payload.errors?.name?.[0] ||
+                    payload.message ||
+                    'Unable to create the category.',
+            );
+        }
+
+        dynamicOptions[field.key] = [
+            ...dynamicOptions[field.key],
+            payload.data,
+        ];
+        form[field.key] = payload.data.value;
+        inlineCreateField.value = null;
+
+        props.fields
+            .filter((candidate) => candidate.dependsOn === field.key)
+            .forEach((dependent) => {
+                form[dependent.key] = null;
+                void loadDependentOptions(dependent);
+            });
+    } catch (error) {
+        inlineCreate.error =
+            error instanceof Error
+                ? error.message
+                : 'Unable to create category.';
+    } finally {
+        inlineCreate.processing = false;
+    }
+}
+
+function csrfToken() {
+    return (
+        document
+            .querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
+            ?.getAttribute('content') || ''
+    );
+}
+
+function startDragging(row: AdminRow, event: DragEvent) {
+    draggedId.value = row.id;
+    event.dataTransfer?.setData('text/plain', String(row.id));
+
+    if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+    }
+}
+
+async function dropOnRow(target: AdminRow) {
+    const sourceId = draggedId.value;
+    draggedId.value = null;
+
+    if (!canReorder.value || sourceId === null || sourceId === target.id) {
+        return;
+    }
+
+    const previousRows = [...displayRows.value];
+    const sourceIndex = displayRows.value.findIndex(
+        (row) => row.id === sourceId,
+    );
+    const targetIndex = displayRows.value.findIndex(
+        (row) => row.id === target.id,
+    );
+
+    if (sourceIndex < 0 || targetIndex < 0) {
+        return;
+    }
+
+    const reordered = [...displayRows.value];
+    const [source] = reordered.splice(sourceIndex, 1);
+    reordered.splice(targetIndex, 0, source);
+    displayRows.value = reordered;
+    orderingError.value = '';
+
+    try {
+        const response = await fetch(props.ordering?.url || '', {
+            method: 'PATCH',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken(),
+            },
+            body: JSON.stringify({
+                items: reordered.map((row, index) => ({
+                    id: Number(row.id),
+                    sort_order: Math.max((props.rows.from || 1) - 1, 0) + index,
+                })),
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Unable to save the new order.');
+        }
+    } catch (error) {
+        displayRows.value = previousRows;
+        orderingError.value =
+            error instanceof Error ? error.message : 'Unable to save order.';
+    }
+}
+
 function inputValue(event: Event) {
     return (event.target as HTMLInputElement | HTMLTextAreaElement).value;
 }
 
 function checkboxEventValue(event: Event) {
     return (event.target as HTMLInputElement).checked;
-}
-
-function multiSelectValue(event: Event) {
-    return Array.from((event.target as HTMLSelectElement).selectedOptions).map(
-        (option) => option.value,
-    );
 }
 
 function displayCell(row: AdminRow, key: string) {
@@ -403,15 +691,25 @@ function workflowActionClass(action: WorkflowAction) {
                 </div>
             </div>
 
-            <button
-                v-if="canCreate"
-                type="button"
-                class="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-                @click="openCreate"
-            >
-                <Plus class="size-4" />
-                New
-            </button>
+            <div class="flex flex-wrap items-center gap-2">
+                <a
+                    v-if="exportUrl"
+                    :href="exportUrl"
+                    class="inline-flex items-center justify-center gap-2 rounded-md border bg-background px-3 py-2 text-sm font-medium hover:bg-muted"
+                >
+                    <Download class="size-4" />
+                    Export
+                </a>
+                <button
+                    v-if="canCreate"
+                    type="button"
+                    class="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+                    @click="openCreate"
+                >
+                    <Plus class="size-4" />
+                    New
+                </button>
+            </div>
         </div>
 
         <section class="rounded-lg border bg-card p-3">
@@ -513,13 +811,27 @@ function workflowActionClass(action: WorkflowAction) {
             <button
                 type="button"
                 class="inline-flex h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-muted disabled:opacity-50"
-                :disabled="selectedIds.length === 0 || !bulk.action"
+                :disabled="
+                    selectedIds.length === 0 ||
+                    !bulk.action ||
+                    Boolean(selectedBulkAction?.options.length && !bulk.value)
+                "
+                :aria-disabled="
+                    Boolean(selectedBulkAction?.options.length && !bulk.value)
+                "
                 @click="runBulkAction"
             >
                 <Check class="size-4" />
                 Run
             </button>
         </section>
+
+        <p
+            v-if="orderingError"
+            class="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+        >
+            {{ orderingError }}
+        </p>
 
         <section class="overflow-hidden rounded-lg border bg-card">
             <div class="overflow-x-auto">
@@ -547,16 +859,29 @@ function workflowActionClass(action: WorkflowAction) {
                     </thead>
                     <tbody>
                         <tr
-                            v-for="row in rows.data"
+                            v-for="row in displayRows"
                             :key="row.id"
                             class="border-b last:border-b-0"
+                            @dragover.prevent
+                            @drop="dropOnRow(row)"
                         >
                             <td class="px-3 py-3 align-top">
-                                <input
-                                    v-model="selectedIds"
-                                    type="checkbox"
-                                    :value="row.id"
-                                />
+                                <div class="flex items-center gap-2">
+                                    <GripVertical
+                                        v-if="canReorder"
+                                        class="size-4 cursor-grab text-muted-foreground active:cursor-grabbing"
+                                        draggable="true"
+                                        role="button"
+                                        tabindex="0"
+                                        aria-label="Drag to reorder"
+                                        @dragstart="startDragging(row, $event)"
+                                    />
+                                    <input
+                                        v-model="selectedIds"
+                                        type="checkbox"
+                                        :value="row.id"
+                                    />
+                                </div>
                             </td>
                             <td
                                 v-for="column in columns"
@@ -599,7 +924,7 @@ function workflowActionClass(action: WorkflowAction) {
                                 </div>
                             </td>
                         </tr>
-                        <tr v-if="rows.data.length === 0">
+                        <tr v-if="displayRows.length === 0">
                             <td
                                 :colspan="columns.length + 2"
                                 class="px-3 py-10 text-center text-sm text-muted-foreground"
@@ -691,53 +1016,67 @@ function workflowActionClass(action: WorkflowAction) {
                     :key="field.key"
                     class="flex flex-col gap-1 text-sm font-medium"
                     :class="
-                        ['textarea', 'media', 'multiselect'].includes(
-                            field.type,
-                        )
+                        [
+                            'textarea',
+                            'richtext',
+                            'media',
+                            'multiselect',
+                        ].includes(field.type)
                             ? 'lg:col-span-2'
                             : ''
                     "
                 >
-                    <span>{{ field.label }}</span>
+                    <span class="flex items-center justify-between gap-2">
+                        <span>{{ field.label }}</span>
+                        <button
+                            v-if="field.inlineCreate"
+                            type="button"
+                            class="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                            @click.prevent.stop="toggleInlineCreate(field)"
+                        >
+                            <Plus class="size-3.5" />
+                            {{ field.inlineCreate.label }}
+                        </button>
+                    </span>
                     <textarea
-                        v-if="field.type === 'textarea'"
+                        v-if="['textarea', 'json'].includes(field.type)"
                         :value="textValue(field.key)"
                         class="min-h-28 rounded-md border bg-background px-3 py-2 text-sm"
+                        :class="field.type === 'json' ? 'font-mono' : ''"
                         @input="setFormValue(field.key, inputValue($event))"
+                    />
+                    <RichTextEditor
+                        v-else-if="field.type === 'richtext'"
+                        :model-value="String(textValue(field.key))"
+                        :placeholder="`Write ${field.label.toLowerCase()}…`"
+                        @update:model-value="setFormValue(field.key, $event)"
                     />
                     <select
                         v-else-if="field.type === 'select'"
                         :value="textValue(field.key)"
                         class="h-10 rounded-md border bg-background px-2 text-sm"
                         :required="field.required"
-                        @change="setFormValue(field.key, inputValue($event))"
+                        :disabled="
+                            Boolean(field.dependsOn && !form[field.dependsOn])
+                        "
+                        @change="handleSelectChange(field, $event)"
                     >
                         <option value="">None</option>
                         <option
-                            v-for="option in field.options"
+                            v-for="option in optionsFor(field)"
                             :key="option.value"
                             :value="option.value"
                         >
                             {{ option.label }}
                         </option>
                     </select>
-                    <select
+                    <MultiSelectPicker
                         v-else-if="field.type === 'multiselect'"
-                        :value="multiValue(field.key)"
-                        multiple
-                        class="min-h-32 rounded-md border bg-background px-2 py-2 text-sm"
-                        @change="
-                            setFormValue(field.key, multiSelectValue($event))
-                        "
-                    >
-                        <option
-                            v-for="option in field.options"
-                            :key="option.value"
-                            :value="option.value"
-                        >
-                            {{ option.label }}
-                        </option>
-                    </select>
+                        :model-value="multiValue(field.key)"
+                        :options="optionsFor(field)"
+                        :placeholder="`Select ${field.label.toLowerCase()}`"
+                        @update:model-value="setFormValue(field.key, $event)"
+                    />
                     <AdminMediaPicker
                         v-else-if="field.type === 'media'"
                         :model-value="mediaValue(field.key)"
@@ -768,6 +1107,59 @@ function workflowActionClass(action: WorkflowAction) {
                         :required="field.required"
                         @input="setFormValue(field.key, inputValue($event))"
                     />
+                    <div
+                        v-if="
+                            field.inlineCreate &&
+                            inlineCreateField === field.key
+                        "
+                        class="grid gap-2 rounded-md border bg-muted/30 p-3"
+                        @click.stop
+                    >
+                        <input
+                            v-model="inlineCreate.name"
+                            type="text"
+                            class="h-9 rounded-md border bg-background px-3 text-sm"
+                            placeholder="Category name"
+                        />
+                        <textarea
+                            v-model="inlineCreate.description"
+                            class="min-h-20 rounded-md border bg-background px-3 py-2 text-sm"
+                            placeholder="Description (optional)"
+                        />
+                        <label class="flex items-center gap-2 text-xs">
+                            <input
+                                v-model="inlineCreate.is_active"
+                                type="checkbox"
+                            />
+                            Active
+                        </label>
+                        <p
+                            v-if="inlineCreate.error"
+                            class="text-xs text-destructive"
+                        >
+                            {{ inlineCreate.error }}
+                        </p>
+                        <div class="flex justify-end gap-2">
+                            <button
+                                type="button"
+                                class="rounded-md border px-2 py-1 text-xs font-medium"
+                                @click.prevent.stop="toggleInlineCreate(field)"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+                                :disabled="
+                                    inlineCreate.processing ||
+                                    !inlineCreate.name.trim()
+                                "
+                                @click.prevent.stop="submitInlineCreate(field)"
+                            >
+                                Add
+                            </button>
+                        </div>
+                    </div>
                     <span
                         v-if="form.errors[field.key]"
                         class="text-xs text-destructive"

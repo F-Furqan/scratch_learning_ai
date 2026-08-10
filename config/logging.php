@@ -1,5 +1,6 @@
 <?php
 
+use App\Logging\DatabaseLoggerFactory;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -54,8 +55,17 @@ return [
 
         'stack' => [
             'driver' => 'stack',
-            'channels' => explode(',', (string) env('LOG_STACK', 'daily')),
+            'channels' => array_values(array_unique([
+                ...explode(',', (string) env('LOG_STACK', 'daily')),
+                'database',
+            ])),
             'ignore_exceptions' => false,
+        ],
+
+        'database' => [
+            'driver' => 'custom',
+            'via' => DatabaseLoggerFactory::class,
+            'level' => env('LOG_DATABASE_LEVEL', 'warning'),
         ],
 
         'single' => [

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Form, Head, Link } from '@inertiajs/vue3';
 
+import RichTextEditor from '@/components/admin/RichTextEditor.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -221,15 +222,17 @@ const method = props.item ? 'patch' : 'post';
                     <Label :for="isCourse ? 'description' : 'content'">
                         {{ isCourse ? 'Course description' : 'Blog content' }}
                     </Label>
-                    <textarea
-                        :id="isCourse ? 'description' : 'content'"
+                    <RichTextEditor
                         :name="isCourse ? 'description' : 'content'"
-                        required
-                        class="min-h-56 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                        :value="
+                        :model-value="
                             isCourse
                                 ? item?.description || ''
                                 : item?.content || ''
+                        "
+                        :placeholder="
+                            isCourse
+                                ? 'Write the course description…'
+                                : 'Write the article…'
                         "
                     />
                     <InputError

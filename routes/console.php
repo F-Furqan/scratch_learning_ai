@@ -2,6 +2,9 @@
 
 use App\Jobs\AggregateAdReportsJob;
 use App\Jobs\QueueHeartbeatJob;
+use App\Models\ApplicationLogEntry;
+use App\Models\HealthCheckRun;
+use App\Models\SchedulerHeartbeat;
 use App\Services\Creators\EditorialWorkflowService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -33,6 +36,21 @@ Schedule::command('platform:monitor')
 Schedule::command('queue:prune-failed --hours=168')
     ->dailyAt('03:00')
     ->name('queue.prune-failed')
+    ->withoutOverlapping()
+    ->onOneServer();
+Schedule::call(function (): void {
+    ApplicationLogEntry::query()
+        ->where('occurred_at', '<', now()->subDays(max(1, (int) config('operations.logging.database_retention_days', 14))))
+        ->delete();
+    HealthCheckRun::query()
+        ->where('checked_at', '<', now()->subDays(max(1, (int) config('operations.logging.health_retention_days', 14))))
+        ->delete();
+    SchedulerHeartbeat::query()
+        ->where('started_at', '<', now()->subDays(max(1, (int) config('operations.logging.scheduler_retention_days', 14))))
+        ->delete();
+})
+    ->dailyAt('03:20')
+    ->name('operations.prune-history')
     ->withoutOverlapping()
     ->onOneServer();
 Schedule::command('editorial:publish-due')

@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use Database\Factories\MediaUsageFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -10,6 +12,9 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 #[Fillable(['media_asset_id', 'mediable_type', 'mediable_id', 'collection'])]
 class MediaUsage extends Model
 {
+    /** @use HasFactory<MediaUsageFactory> */
+    use HasFactory;
+
     /**
      * @return BelongsTo<MediaAsset, $this>
      */

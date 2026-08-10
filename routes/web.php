@@ -4,7 +4,6 @@ use App\Http\Controllers\Admin\AdminBlogWorkflowController;
 use App\Http\Controllers\Admin\AdminCourseWorkflowController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminLoginController;
-use App\Http\Controllers\Admin\AdminOperationController;
 use App\Http\Controllers\Admin\AdminReportController;
 use App\Http\Controllers\Admin\AdminReviewCenterController;
 use App\Http\Controllers\Admin\AdminTrashController;
@@ -51,6 +50,30 @@ use App\Http\Controllers\Student\StudentLessonQuestionController;
 use App\Http\Controllers\Student\StudentQuizAttemptController;
 use App\Http\Controllers\Student\StudentResourceDownloadController;
 use Illuminate\Support\Facades\Route;
+use Modules\Admin\Enums\AdminDomain;
+use Modules\Admin\Http\Controllers\AdminCourseBuilderController;
+use Modules\Admin\Http\Controllers\AdminMenuBuilderController;
+use Modules\Admin\Http\Controllers\CatalogAdminController;
+use Modules\Admin\Http\Controllers\CommerceAdminController;
+use Modules\Admin\Http\Controllers\CommunityAdminController;
+use Modules\Admin\Http\Controllers\EditorialAdminController;
+use Modules\Admin\Http\Controllers\EditorialRevisionReviewController;
+use Modules\Admin\Http\Controllers\GrowthAdminController;
+use Modules\Admin\Http\Controllers\LearningAdminController;
+use Modules\Admin\Http\Controllers\LearningRecordReviewController;
+use Modules\Admin\Http\Controllers\OperationalRecordActionController;
+use Modules\Admin\Http\Controllers\OperationalRecordExportController;
+use Modules\Admin\Http\Controllers\OperationsAdminController;
+use Modules\Admin\Http\Controllers\OperationsCenterController;
+use Modules\Admin\Http\Requests\Learning\AbstractLearningRecordRequest;
+use Modules\Admin\Http\Requests\Operations\AbstractOperationalRecordRequest;
+use Modules\Admin\Registry\AdminResourceRegistry;
+use Modules\Admin\Services\AdminCourseBuilderService;
+use Modules\Admin\Services\CommerceOperationsAdminService;
+use Modules\Admin\Services\CommunityOperationsAdminService;
+use Modules\Admin\Services\CourseCatalogAdminService;
+use Modules\Admin\Services\EditorialCmsAdminService;
+use Modules\Admin\Services\OperationsCenterAdminService;
 
 Route::get('health', OperationalHealthController::class)->name('health');
 
@@ -321,60 +344,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
                         ->name('copyright-takedowns.dismiss');
                 });
 
-            $adminResources = [
-                'users' => ['path' => 'users', 'middleware' => 'permission:manage_users', 'name' => 'users'],
-                'roles' => ['path' => 'roles', 'middleware' => 'permission:manage_roles|manage_permissions', 'name' => 'roles'],
-                'permissions' => ['path' => 'permissions', 'middleware' => 'permission:manage_permissions', 'name' => 'permissions'],
-                'bloggers' => ['path' => 'bloggers', 'middleware' => 'permission:approve_bloggers', 'name' => 'bloggers'],
-                'courses' => ['path' => 'courses', 'middleware' => 'permission:manage_courses', 'name' => 'courses'],
-                'lessons' => ['path' => 'lessons', 'middleware' => 'permission:manage_lessons|manage_courses', 'name' => 'lessons'],
-                'blogs' => ['path' => 'blogs', 'middleware' => 'permission:manage_blogs', 'name' => 'blogs'],
-                'cms' => ['path' => 'cms', 'middleware' => 'permission:manage_cms', 'name' => 'cms'],
-                'home_hero' => ['path' => 'cms/home-hero', 'middleware' => 'permission:manage_cms|manage_settings', 'name' => 'cms.home-hero'],
-                'home_hero_slides' => ['path' => 'cms/home-hero-slides', 'middleware' => 'permission:manage_cms|manage_settings|manage_media', 'name' => 'cms.home-hero-slides'],
-                'home_page_sections' => ['path' => 'cms/homepage-sections', 'middleware' => 'permission:manage_cms|manage_settings', 'name' => 'cms.homepage-sections'],
-                'menus' => ['path' => 'menus', 'middleware' => 'permission:manage_cms', 'name' => 'menus'],
-                'media' => ['path' => 'media', 'middleware' => 'permission:manage_media', 'name' => 'media'],
-                'ad_zones' => ['path' => 'ads/zones', 'middleware' => 'permission:manage_ads', 'name' => 'ads.zones'],
-                'ad_campaigns' => ['path' => 'ads/campaigns', 'middleware' => 'permission:manage_ads', 'name' => 'ads.campaigns'],
-                'ad_creatives' => ['path' => 'ads/creatives', 'middleware' => 'permission:manage_ads', 'name' => 'ads.creatives'],
-                'advertiser_requests' => ['path' => 'ads/advertiser-requests', 'middleware' => 'permission:manage_ads', 'name' => 'ads.advertiser-requests'],
-                'ad_pricing' => ['path' => 'ads/pricing', 'middleware' => 'permission:manage_ads', 'name' => 'ads.pricing'],
-                'instructors' => ['path' => 'creators/instructors', 'middleware' => 'permission:manage_courses|manage_blogs|approve_bloggers', 'name' => 'creators.instructors'],
-                'author_badges' => ['path' => 'creators/badges', 'middleware' => 'permission:manage_courses|manage_blogs|approve_bloggers', 'name' => 'creators.badges'],
-                'editorial_revisions' => ['path' => 'editorial/revisions', 'middleware' => 'permission:manage_blogs|manage_courses|manage_cms', 'name' => 'editorial.revisions'],
-                'reviewer_comments' => ['path' => 'editorial/comments', 'middleware' => 'permission:manage_blogs|manage_courses|manage_cms', 'name' => 'editorial.comments'],
-                'scheduled_publications' => ['path' => 'editorial/scheduled', 'middleware' => 'permission:manage_blogs|manage_courses|manage_cms', 'name' => 'editorial.scheduled'],
-                'revenue_share_rules' => ['path' => 'payments/revenue-share', 'middleware' => 'permission:manage_payments', 'name' => 'payments.revenue-share'],
-                'payment_products' => ['path' => 'payments/products', 'middleware' => 'permission:manage_payments', 'name' => 'payments.products'],
-                'payment_prices' => ['path' => 'payments/prices', 'middleware' => 'permission:manage_payments', 'name' => 'payments.prices'],
-                'payment_discounts' => ['path' => 'growth/discounts', 'middleware' => 'permission:manage_payments', 'name' => 'growth.discounts'],
-                'payment_checkouts' => ['path' => 'payments/checkouts', 'middleware' => 'permission:manage_payments', 'name' => 'payments.checkouts'],
-                'payment_orders' => ['path' => 'payments/orders', 'middleware' => 'permission:manage_payments', 'name' => 'payments.orders'],
-                'payment_subscriptions' => ['path' => 'payments/subscriptions', 'middleware' => 'permission:manage_payments', 'name' => 'payments.subscriptions'],
-                'team_accounts' => ['path' => 'payments/teams', 'middleware' => 'permission:manage_payments', 'name' => 'payments.teams'],
-                'team_seats' => ['path' => 'payments/seats', 'middleware' => 'permission:manage_payments', 'name' => 'payments.seats'],
-                'payment_reconciliation' => ['path' => 'payments/reconciliation', 'middleware' => 'permission:manage_payments', 'name' => 'payments.reconciliation'],
-                'gift_purchases' => ['path' => 'growth/gifts', 'middleware' => 'permission:manage_payments', 'name' => 'growth.gifts'],
-                'affiliate_partners' => ['path' => 'growth/affiliates', 'middleware' => 'permission:manage_payments', 'name' => 'growth.affiliates'],
-                'affiliate_visits' => ['path' => 'growth/affiliate-visits', 'middleware' => 'permission:manage_payments', 'name' => 'growth.affiliate-visits'],
-                'referral_conversions' => ['path' => 'growth/referrals', 'middleware' => 'permission:manage_payments', 'name' => 'growth.referrals'],
-                'checkout_recoveries' => ['path' => 'growth/checkout-recoveries', 'middleware' => 'permission:manage_payments', 'name' => 'growth.checkout-recoveries'],
-                'lead_magnets' => ['path' => 'growth/lead-magnets', 'middleware' => 'permission:manage_payments|manage_cms', 'name' => 'growth.lead-magnets'],
-                'newsletter_campaigns' => ['path' => 'growth/newsletters', 'middleware' => 'permission:manage_payments|manage_cms', 'name' => 'growth.newsletters'],
-                'lead_submissions' => ['path' => 'growth/leads', 'middleware' => 'permission:manage_payments|manage_cms', 'name' => 'growth.leads'],
-                'ab_experiments' => ['path' => 'growth/experiments', 'middleware' => 'permission:manage_payments|manage_cms', 'name' => 'growth.experiments'],
-                'ab_variants' => ['path' => 'growth/variants', 'middleware' => 'permission:manage_payments|manage_cms', 'name' => 'growth.variants'],
-                'social_share_images' => ['path' => 'growth/social-images', 'middleware' => 'permission:manage_payments|manage_cms|manage_media', 'name' => 'growth.social-images'],
-                'moderation_queue' => ['path' => 'community/moderation', 'middleware' => 'permission:manage_courses|manage_blogs|manage_cms', 'name' => 'community.moderation'],
-                'content_reports' => ['path' => 'community/reports', 'middleware' => 'permission:manage_courses|manage_blogs|manage_cms', 'name' => 'community.reports'],
-                'blocked_words' => ['path' => 'community/blocked-words', 'middleware' => 'permission:manage_courses|manage_blogs|manage_cms', 'name' => 'community.blocked-words'],
-                'discussion_forums' => ['path' => 'community/forums', 'middleware' => 'permission:manage_courses|manage_cms', 'name' => 'community.forums'],
-                'discussion_threads' => ['path' => 'community/threads', 'middleware' => 'permission:manage_courses|manage_cms', 'name' => 'community.threads'],
-                'community_groups' => ['path' => 'community/groups', 'middleware' => 'permission:manage_courses|manage_payments', 'name' => 'community.groups'],
-                'trash' => ['path' => 'trash', 'middleware' => 'permission:manage_courses|manage_blogs', 'name' => 'trash'],
-                'settings' => ['path' => 'settings', 'middleware' => 'permission:manage_settings', 'name' => 'settings'],
-            ];
+            $adminResources = app(AdminResourceRegistry::class)->all();
+
+            Route::prefix('operations')
+                ->middleware('permission:manage_settings|admin.health_checks.view|admin.operational_alerts.view')
+                ->name('operations-center.')
+                ->group(function (): void {
+                    Route::get('/', [OperationsCenterController::class, 'index'])->name('index');
+                    Route::post('actions/backup', [OperationsCenterController::class, 'backup'])
+                        ->defaults('operation', 'backup')
+                        ->name('backup');
+                    Route::post('actions/health', [OperationsCenterController::class, 'health'])
+                        ->defaults('operation', 'health')
+                        ->name('health');
+                    Route::post('actions/monitor', [OperationsCenterController::class, 'monitor'])
+                        ->defaults('operation', 'monitor')
+                        ->name('monitor');
+                });
 
             Route::prefix('blog-workflow')
                 ->middleware('permission:manage_blogs')
@@ -390,6 +376,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
                         ->whereNumber('post')
                         ->name('blogs.reject');
                     Route::post('blogs/{post}/publish', [AdminBlogWorkflowController::class, 'publish'])
+                        ->middleware('permission:admin.content.publish')
                         ->whereNumber('post')
                         ->name('blogs.publish');
                     Route::post('revisions/{revision}/approve', [AdminBlogWorkflowController::class, 'approveRevision'])
@@ -414,6 +401,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 ->name('course-workflow.')
                 ->group(function (): void {
                     Route::post('courses/{course}/approve', [AdminCourseWorkflowController::class, 'approve'])
+                        ->middleware('permission:admin.content.publish')
                         ->whereNumber('course')
                         ->name('courses.approve');
                     Route::post('courses/{course}/changes-requested', [AdminCourseWorkflowController::class, 'requestChanges'])
@@ -448,36 +436,180 @@ Route::middleware(['auth', 'verified'])->group(function () {
                         ->whereNumber('id')
                         ->name('restore');
                     Route::delete('{type}/{id}/force', [AdminTrashController::class, 'destroy'])
+                        ->middleware('permission:admin.content.force_delete')
                         ->whereIn('type', ['course', 'blog'])
                         ->whereNumber('id')
                         ->name('force-delete');
                 });
 
+            Route::post('course-categories/quick', [CatalogAdminController::class, 'quickStoreCategory'])
+                ->middleware($adminResources['course_categories']->middlewareFor('manage'))
+                ->defaults('resource', 'course_categories')
+                ->name('course-categories.quick-store');
+
+            Route::get('catalog/course-categories/{category}/subcategories', [CatalogAdminController::class, 'subcategories'])
+                ->middleware($adminResources['courses']->middlewareFor('manage'))
+                ->defaults('resource', 'courses')
+                ->whereNumber('category')
+                ->name('catalog.course-categories.subcategories');
+
+            Route::get('catalog/courses/{course}/lessons', [CatalogAdminController::class, 'lessons'])
+                ->middleware($adminResources['courses']->middlewareFor('manage'))
+                ->defaults('resource', 'courses')
+                ->whereNumber('course')
+                ->name('catalog.courses.lessons');
+
+            Route::prefix('courses/{course}/builder')
+                ->middleware($adminResources['courses']->middlewareFor('manage'))
+                ->name('courses.builder.')
+                ->group(function (): void {
+                    Route::get('/', [AdminCourseBuilderController::class, 'show'])->defaults('resource', 'courses')->whereNumber('course')->name('show');
+                    Route::patch('/', [AdminCourseBuilderController::class, 'update'])->defaults('resource', 'courses')->whereNumber('course')->name('update');
+                    Route::patch('ownership', [AdminCourseBuilderController::class, 'ownership'])->defaults('resource', 'courses')->whereNumber('course')->name('ownership');
+                    Route::patch('publishing', [AdminCourseBuilderController::class, 'publishing'])->defaults('resource', 'courses')->whereNumber('course')->name('publishing');
+                    Route::patch('product', [AdminCourseBuilderController::class, 'product'])->defaults('resource', 'courses')->whereNumber('course')->name('product');
+                    Route::post('items/{kind}', [AdminCourseBuilderController::class, 'storeItem'])
+                        ->defaults('resource', 'courses')
+                        ->whereNumber('course')
+                        ->whereIn('kind', AdminCourseBuilderService::ITEM_KINDS)
+                        ->name('items.store');
+                    Route::patch('items/{kind}/{id}', [AdminCourseBuilderController::class, 'updateItem'])
+                        ->defaults('resource', 'courses')
+                        ->whereNumber('course')
+                        ->whereIn('kind', AdminCourseBuilderService::ITEM_KINDS)
+                        ->whereNumber('id')
+                        ->name('items.update');
+                    Route::delete('items/{kind}/{id}', [AdminCourseBuilderController::class, 'destroyItem'])
+                        ->defaults('resource', 'courses')
+                        ->whereNumber('course')
+                        ->whereIn('kind', AdminCourseBuilderService::ITEM_KINDS)
+                        ->whereNumber('id')
+                        ->name('items.destroy');
+                    Route::patch('reorder', [AdminCourseBuilderController::class, 'reorder'])
+                        ->defaults('resource', 'courses')
+                        ->whereNumber('course')
+                        ->name('reorder');
+                });
+
+            Route::prefix('menus/{menu}/builder')
+                ->middleware($adminResources['menus']->middlewareFor('manage'))
+                ->name('menus.builder.')
+                ->group(function (): void {
+                    Route::get('/', [AdminMenuBuilderController::class, 'show'])
+                        ->whereNumber('menu')
+                        ->name('show');
+                    Route::patch('reorder', [AdminMenuBuilderController::class, 'reorder'])
+                        ->whereNumber('menu')
+                        ->name('reorder');
+                });
+
+            Route::prefix('editorial/revisions/{revision}')
+                ->middleware($adminResources['editorial_revisions']->middlewareFor('view'))
+                ->name('editorial.revisions.')
+                ->group(function () use ($adminResources): void {
+                    Route::get('review', [EditorialRevisionReviewController::class, 'show'])
+                        ->whereNumber('revision')
+                        ->name('review');
+                    Route::post('comments', [EditorialRevisionReviewController::class, 'storeComment'])
+                        ->middleware($adminResources['editorial_revisions']->middlewareFor('manage'))
+                        ->whereNumber('revision')
+                        ->name('comments.store');
+                    Route::patch('comments/{comment}/resolve', [EditorialRevisionReviewController::class, 'resolveComment'])
+                        ->middleware($adminResources['editorial_revisions']->middlewareFor('manage'))
+                        ->whereNumber('revision')
+                        ->whereNumber('comment')
+                        ->name('comments.resolve');
+                });
+
+            Route::prefix('learning/records')
+                ->name('learning.records.')
+                ->group(function (): void {
+                    Route::get('{type}/{id}', [LearningRecordReviewController::class, 'show'])
+                        ->whereIn('type', array_keys(AbstractLearningRecordRequest::RESOURCE_BY_TYPE))
+                        ->whereNumber('id')
+                        ->name('show');
+                    Route::patch('{type}/{id}', [LearningRecordReviewController::class, 'update'])
+                        ->whereIn('type', array_keys(AbstractLearningRecordRequest::RESOURCE_BY_TYPE))
+                        ->whereNumber('id')
+                        ->name('update');
+                });
+
+            Route::prefix('operational-records')
+                ->name('operational-records.')
+                ->group(function (): void {
+                    Route::get('export/{resource}', OperationalRecordExportController::class)
+                        ->whereIn('resource', [
+                            ...CommerceOperationsAdminService::RESOURCES,
+                            ...CommunityOperationsAdminService::RESOURCES,
+                            ...OperationsCenterAdminService::RESOURCES,
+                        ])
+                        ->name('export');
+                    Route::get('{type}/{id}', [OperationalRecordActionController::class, 'show'])
+                        ->whereIn('type', array_keys(AbstractOperationalRecordRequest::RESOURCE_BY_TYPE))
+                        ->whereNumber('id')
+                        ->name('show');
+                    Route::patch('{type}/{id}', [OperationalRecordActionController::class, 'update'])
+                        ->whereIn('type', array_keys(AbstractOperationalRecordRequest::RESOURCE_BY_TYPE))
+                        ->whereNumber('id')
+                        ->name('update');
+                });
+
+            foreach (CourseCatalogAdminService::RESOURCES as $catalogResource) {
+                $catalogDefinition = $adminResources[$catalogResource];
+
+                Route::patch($catalogDefinition->path.'/reorder', [CatalogAdminController::class, 'reorder'])
+                    ->middleware($catalogDefinition->middlewareFor('manage'))
+                    ->middleware('permission:admin.catalog.reorder')
+                    ->defaults('resource', $catalogResource)
+                    ->name($catalogDefinition->routeName.'.reorder');
+            }
+
+            foreach (EditorialCmsAdminService::REORDERABLE_RESOURCES as $editorialResource) {
+                $editorialDefinition = $adminResources[$editorialResource];
+
+                Route::patch($editorialDefinition->path.'/reorder', [EditorialAdminController::class, 'reorder'])
+                    ->middleware($editorialDefinition->middlewareFor('manage'))
+                    ->defaults('resource', $editorialResource)
+                    ->name($editorialDefinition->routeName.'.reorder');
+            }
+
             foreach ($adminResources as $resource => $adminResource) {
-                Route::middleware($adminResource['middleware'])
-                    ->group(function () use ($resource, $adminResource): void {
-                        Route::get($adminResource['path'], [AdminOperationController::class, 'index'])
-                            ->defaults('resource', $resource)
-                            ->name($adminResource['name'].'.index');
+                $controller = match ($adminResource->domain) {
+                    AdminDomain::Catalog => CatalogAdminController::class,
+                    AdminDomain::Editorial => EditorialAdminController::class,
+                    AdminDomain::Learning => LearningAdminController::class,
+                    AdminDomain::Commerce => CommerceAdminController::class,
+                    AdminDomain::Community => CommunityAdminController::class,
+                    AdminDomain::Growth => GrowthAdminController::class,
+                    AdminDomain::Operations => OperationsAdminController::class,
+                };
 
-                        Route::post($adminResource['path'], [AdminOperationController::class, 'store'])
-                            ->defaults('resource', $resource)
-                            ->name($adminResource['name'].'.store');
+                Route::get($adminResource->path, [$controller, 'index'])
+                    ->middleware($adminResource->middlewareFor('view'))
+                    ->defaults('resource', $resource)
+                    ->name($adminResource->routeName.'.index');
 
-                        Route::post($adminResource['path'].'/bulk', [AdminOperationController::class, 'bulk'])
-                            ->defaults('resource', $resource)
-                            ->name($adminResource['name'].'.bulk');
+                Route::post($adminResource->path, [$controller, 'store'])
+                    ->middleware($adminResource->middlewareFor('manage'))
+                    ->defaults('resource', $resource)
+                    ->name($adminResource->routeName.'.store');
 
-                        Route::patch($adminResource['path'].'/{id}', [AdminOperationController::class, 'update'])
-                            ->defaults('resource', $resource)
-                            ->whereNumber('id')
-                            ->name($adminResource['name'].'.update');
+                Route::post($adminResource->path.'/bulk', [$controller, 'bulk'])
+                    ->middleware($adminResource->middlewareFor('manage'))
+                    ->defaults('resource', $resource)
+                    ->name($adminResource->routeName.'.bulk');
 
-                        Route::delete($adminResource['path'].'/{id}', [AdminOperationController::class, 'destroy'])
-                            ->defaults('resource', $resource)
-                            ->whereNumber('id')
-                            ->name($adminResource['name'].'.destroy');
-                    });
+                Route::patch($adminResource->path.'/{id}', [$controller, 'update'])
+                    ->middleware($adminResource->middlewareFor('manage'))
+                    ->defaults('resource', $resource)
+                    ->whereNumber('id')
+                    ->name($adminResource->routeName.'.update');
+
+                Route::delete($adminResource->path.'/{id}', [$controller, 'destroy'])
+                    ->middleware($adminResource->middlewareFor('manage'))
+                    ->defaults('resource', $resource)
+                    ->whereNumber('id')
+                    ->name($adminResource->routeName.'.destroy');
             }
         });
 });

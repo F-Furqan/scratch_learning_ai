@@ -94,7 +94,11 @@ class AdminOperationsDeepSmokeTest extends TestCase
         $props = $this->inertiaProps($response);
 
         $this->assertNotEmpty($props['columns'], "{$resource} should expose table columns.");
-        $this->assertNotEmpty($props['fields'], "{$resource} should expose form fields.");
+        if ($props['canCreate']) {
+            $this->assertNotEmpty($props['fields'], "{$resource} should expose form fields.");
+        } else {
+            $this->assertEmpty($props['fields'], "{$resource} is read-only and should not expose generic form fields.");
+        }
     }
 
     public function test_lesson_new_form_contract_can_create_update_and_delete_a_lesson(): void

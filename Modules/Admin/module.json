@@ -1,0 +1,15 @@
+{
+    "name": "Admin",
+    "alias": "admin",
+    "description": "Permission-aware administration architecture for Scratch Learning.",
+    "keywords": [
+        "admin",
+        "architecture",
+        "inertia"
+    ],
+    "priority": 0,
+    "providers": [
+        "Modules\\Admin\\Providers\\AdminServiceProvider"
+    ],
+    "files": []
+}

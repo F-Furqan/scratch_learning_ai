@@ -10,4 +10,5 @@ enum ReputationEventType: string
     case UpvoteReceived = 'upvote_received';
     case ReportAccepted = 'report_accepted';
     case SpamPenalty = 'spam_penalty';
+    case AdminAdjustment = 'admin_adjustment';
 }

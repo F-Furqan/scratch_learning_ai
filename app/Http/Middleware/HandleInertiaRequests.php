@@ -6,12 +6,14 @@ use App\Contracts\Access\AdminAccessService;
 use App\Contracts\Navigation\DashboardDestinationResolver;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Modules\Admin\Navigation\AdminNavigationBuilder;
 
 class HandleInertiaRequests extends Middleware
 {
     public function __construct(
         private readonly AdminAccessService $adminAccess,
         private readonly DashboardDestinationResolver $dashboardDestinations,
+        private readonly AdminNavigationBuilder $adminNavigation,
     ) {}
 
     /**
@@ -66,6 +68,9 @@ class HandleInertiaRequests extends Middleware
                     'updated_at' => $user->updated_at?->toISOString(),
                 ] : null,
             ],
+            'adminNavigation' => $user && $this->adminAccess->canAccess($user)
+                ? $this->adminNavigation->for($user)
+                : [],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

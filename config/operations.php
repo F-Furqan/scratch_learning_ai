@@ -27,6 +27,7 @@ return [
         'queue_heartbeat_key' => env('QUEUE_HEARTBEAT_KEY', 'operations.queue_heartbeat_at'),
         'queue_heartbeat_required' => (bool) env('QUEUE_HEARTBEAT_REQUIRED', true),
         'queue_heartbeat_max_age_seconds' => (int) env('QUEUE_HEARTBEAT_MAX_AGE_SECONDS', 180),
+        'scheduler_heartbeat_max_age_seconds' => (int) env('SCHEDULER_HEARTBEAT_MAX_AGE_SECONDS', 180),
     ],
 
     'alerts' => [
@@ -41,6 +42,9 @@ return [
 
     'logging' => [
         'external_rotation' => (bool) env('LOG_EXTERNAL_ROTATION', false),
+        'database_retention_days' => (int) env('LOG_DATABASE_RETENTION_DAYS', 14),
+        'health_retention_days' => (int) env('HEALTH_HISTORY_RETENTION_DAYS', 14),
+        'scheduler_retention_days' => (int) env('SCHEDULER_HISTORY_RETENTION_DAYS', 14),
     ],
 
     'monitoring' => [

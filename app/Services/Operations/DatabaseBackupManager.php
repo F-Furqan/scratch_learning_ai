@@ -6,6 +6,7 @@ use App\Contracts\Operations\BackupDriver;
 use App\Enums\BackupVerificationStatus;
 use App\Enums\DatabaseBackupStatus;
 use App\Models\DatabaseBackup;
+use App\Support\Operations\BackupArtifact;
 use App\Support\Operations\BackupContext;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -110,6 +111,54 @@ class DatabaseBackupManager
 
         try {
             $verification = $driver->verify($context, $artifact);
+
+            if (! $verification->verified) {
+                throw new RuntimeException('The backup driver did not confirm restore verification.');
+            }
+
+            $backup->forceFill([
+                'verification_status' => BackupVerificationStatus::Verified,
+                'verified_at' => now(),
+                'metadata' => [...($backup->metadata ?? []), 'verification' => $verification->metadata],
+            ])->save();
+
+            $this->auditLogger->log('database_backup.verified', $backup, $verification->metadata);
+        } catch (\Throwable $exception) {
+            $reason = $this->safeReason($exception, $context);
+            $backup->forceFill([
+                'verification_status' => BackupVerificationStatus::Failed,
+                'verification_failure_reason' => $reason,
+            ])->save();
+
+            $this->auditLogger->log('database_backup.verification_failed', $backup, ['reason' => $reason]);
+            $this->failureNotifier->notify('verify', $reason, $driver->name(), $context->connectionName, $backup);
+
+            throw new RuntimeException('Database backup verification failed: '.$reason, previous: $exception);
+        }
+
+        return $backup->refresh();
+    }
+
+    public function verifyExisting(DatabaseBackup $backup): DatabaseBackup
+    {
+        if ($backup->status !== DatabaseBackupStatus::Succeeded) {
+            throw new RuntimeException('Only successful database backups can be restore-verified.');
+        }
+
+        $context = $this->context();
+        $driver = $this->drivers[$backup->driver] ?? null;
+
+        if ($driver === null) {
+            throw new RuntimeException("Database backup driver [{$backup->driver}] is not registered.");
+        }
+
+        $backup->forceFill([
+            'verification_status' => BackupVerificationStatus::Pending,
+            'verification_failure_reason' => null,
+        ])->save();
+
+        try {
+            $verification = $driver->verify($context, BackupArtifact::fromRecord($backup));
 
             if (! $verification->verified) {
                 throw new RuntimeException('The backup driver did not confirm restore verification.');

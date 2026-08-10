@@ -12,3 +12,13 @@ export type NavItem = {
     icon?: LucideIcon;
     isActive?: boolean;
 };
+
+export type AdminNavigationGroup = {
+    key: string;
+    label: string;
+    icon: string;
+    items: Array<{
+        title: string;
+        href: string;
+    }>;
+};

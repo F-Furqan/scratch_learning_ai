@@ -12,6 +12,7 @@ import {
 import { ref } from 'vue';
 
 import BlogCard from '@/components/public/BlogCard.vue';
+import RichContent from '@/components/public/RichContent.vue';
 import SeoHead from '@/components/public/SeoHead.vue';
 
 import type { BlogPostCard, BlogPostDetail, SeoPayload } from '@/types';
@@ -106,14 +107,13 @@ function dateLabel(value: string | null) {
             <div
                 class="mx-auto grid max-w-6xl gap-10 px-4 sm:px-6 lg:grid-cols-[1fr_300px] lg:px-8"
             >
-                <div
-                    class="min-w-0 rounded-md border border-slate-200 bg-white p-6 text-base leading-8 whitespace-pre-line text-slate-700 shadow-[0_16px_45px_rgba(15,23,42,0.06)]"
-                >
-                    {{
+                <RichContent
+                    class="min-w-0 rounded-md border border-slate-200 bg-white p-6 text-base leading-8 text-slate-700 shadow-[0_16px_45px_rgba(15,23,42,0.06)]"
+                    :html="
                         post.content ||
-                        'This article is being prepared by the editorial team.'
-                    }}
-                </div>
+                        '<p>This article is being prepared by the editorial team.</p>'
+                    "
+                />
 
                 <aside class="h-fit lg:sticky lg:top-28">
                     <div

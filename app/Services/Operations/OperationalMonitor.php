@@ -13,6 +13,7 @@ class OperationalMonitor
 {
     public function __construct(
         private readonly OperationalAlertNotifier $notifier,
+        private readonly OperationalAlertStore $alerts,
     ) {}
 
     /**
@@ -41,9 +42,17 @@ class OperationalMonitor
                     $issue['title'],
                     $issue['message'],
                     $issue['context'],
+                    'monitor',
                 );
             }
         }
+
+        $activeKeys = [];
+        foreach ($issues as $issue) {
+            $activeKeys[] = $issue['key'];
+        }
+
+        $this->alerts->resolveMissingMonitorAlerts($activeKeys);
 
         return $issues;
     }

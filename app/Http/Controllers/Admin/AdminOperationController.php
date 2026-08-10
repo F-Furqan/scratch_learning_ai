@@ -100,49 +100,96 @@ use App\Models\User;
 use App\Services\Admin\ApprovalRecorder;
 use App\Services\Admin\AuditLogger;
 use App\Services\Community\ModerationService;
+use App\Support\Security\ContentSanitizer;
 use Carbon\CarbonInterface;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Modules\Admin\Actions\BulkAdminResourceAction;
+use Modules\Admin\Actions\CreateAdminResourceAction;
+use Modules\Admin\Actions\DeleteAdminResourceAction;
+use Modules\Admin\Actions\UpdateAdminResourceAction;
+use Modules\Admin\Enums\AdminDomain;
+use Modules\Admin\Http\Requests\BulkAdminResourceRequest;
+use Modules\Admin\Http\Requests\DeleteAdminResourceRequest;
+use Modules\Admin\Http\Requests\IndexAdminResourceRequest;
+use Modules\Admin\Http\Requests\StoreAdminResourceRequest;
+use Modules\Admin\Http\Requests\UpdateAdminResourceRequest;
+use Modules\Admin\Http\Resources\AdminTableRecordResource;
+use Modules\Admin\Policies\AdminResourcePolicy;
+use Modules\Admin\Query\AdminResourceQueryFactory;
+use Modules\Admin\Query\AdminResourceQueryFilter;
+use Modules\Admin\Registry\AdminResourceRegistry;
+use Modules\Admin\Services\CommerceOperationsAdminService;
+use Modules\Admin\Services\CommunityOperationsAdminService;
+use Modules\Admin\Services\CourseCatalogAdminService;
+use Modules\Admin\Services\EditorialCmsAdminService;
+use Modules\Admin\Services\LearningAdministrationService;
+use Modules\Admin\Services\OperationsCenterActionService;
+use Modules\Admin\Services\OperationsCenterAdminService;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
-class AdminOperationController extends Controller
+abstract class AdminOperationController extends Controller
 {
     public function __construct(
         private readonly AuditLogger $auditLogger,
         private readonly ApprovalRecorder $approvalRecorder,
         private readonly ModerationService $moderationService,
+        private readonly AdminResourceRegistry $resourceRegistry,
+        private readonly AdminResourceQueryFactory $queryFactory,
+        private readonly AdminResourceQueryFilter $queryFilter,
+        private readonly CreateAdminResourceAction $createAction,
+        private readonly UpdateAdminResourceAction $updateAction,
+        private readonly DeleteAdminResourceAction $deleteAction,
+        private readonly BulkAdminResourceAction $bulkAction,
+        private readonly CourseCatalogAdminService $courseCatalog,
+        private readonly EditorialCmsAdminService $editorialCms,
+        private readonly LearningAdministrationService $learningAdministration,
+        private readonly CommerceOperationsAdminService $commerceOperations,
+        private readonly CommunityOperationsAdminService $communityOperations,
+        private readonly OperationsCenterAdminService $operationsCenter,
+        private readonly OperationsCenterActionService $operationsCenterActions,
+        private readonly AdminResourcePolicy $resourcePolicy,
+        private readonly ContentSanitizer $contentSanitizer,
     ) {}
 
-    public function index(Request $request): Response
+    abstract protected function domain(): AdminDomain;
+
+    public function index(IndexAdminResourceRequest $request): Response
     {
         $resource = $this->resource($request);
-        $definition = $this->definition($resource);
+        $definition = $request->definition();
+        $user = $request->user();
+        $canManage = $user instanceof User && $this->resourcePolicy->manage($user, $definition);
+        $canCreateCategory = $user instanceof User && $this->resourcePolicy->manage(
+            $user,
+            $this->resourceRegistry->get('course_categories'),
+        );
         $perPage = min(max($request->integer('per_page', 15), 5), 100);
 
         $records = $resource === 'trash'
             ? $this->trashPaginator($request, $perPage)
-            : $this->applyFilters($this->queryFor($resource), $resource, $request)
+            : $this->queryFilter->apply($this->queryFactory->make($resource), $resource, $request)
                 ->paginate($perPage)
                 ->withQueryString()
-                ->through(fn (Model $record): array => $this->rowFor($resource, $record));
+                ->through(fn (Model $record): array => AdminTableRecordResource::make(
+                    $this->rowFor($resource, $record),
+                )->resolve($request));
 
         return Inertia::render('admin/Operations', [
             'resource' => $resource,
-            'title' => $definition['title'],
-            'basePath' => $definition['path'],
+            'title' => $definition->title,
+            'basePath' => '/admin/'.$definition->path,
             'columns' => $this->columnsFor($resource),
-            'fields' => $this->fieldsFor($resource),
+            'fields' => $this->fieldsFor($resource, $canCreateCategory),
             'filters' => $this->filtersFor($resource),
             'filterValues' => [
                 'search' => $request->query('search', ''),
@@ -155,92 +202,119 @@ class AdminOperationController extends Controller
             'bulkActions' => $this->bulkActionsFor($resource),
             'mediaAssets' => $this->mediaPickerOptions(),
             'metrics' => $this->metricsFor($resource),
-            'canCreate' => $resource !== 'trash',
-            'canEdit' => $resource !== 'trash',
-            'canDelete' => $resource !== 'trash',
+            'canCreate' => $resource !== 'trash'
+                && ! $this->editorialCms->readOnly($resource)
+                && ! $this->learningAdministration->readOnly($resource)
+                && ! $this->commerceOperations->readOnly($resource)
+                && ! $this->communityOperations->readOnly($resource)
+                && ! $this->operationsCenter->readOnly($resource)
+                && $canManage,
+            'canEdit' => $resource !== 'trash'
+                && ! $this->editorialCms->readOnly($resource)
+                && ! $this->learningAdministration->readOnly($resource)
+                && ! $this->commerceOperations->readOnly($resource)
+                && ! $this->communityOperations->readOnly($resource)
+                && ! $this->operationsCenter->readOnly($resource)
+                && $canManage,
+            'canDelete' => $resource !== 'trash'
+                && ! $this->editorialCms->readOnly($resource)
+                && ! $this->learningAdministration->readOnly($resource)
+                && ! $this->commerceOperations->readOnly($resource)
+                && ! $this->communityOperations->readOnly($resource)
+                && ! $this->operationsCenter->readOnly($resource)
+                && (! $this->learningAdministration->supports($resource) || $this->learningAdministration->deletable($resource))
+                && $canManage,
+            'exportUrl' => $user instanceof User
+                && $user->can('admin.records.export')
+                && ($this->commerceOperations->exportable($resource)
+                    || $this->communityOperations->exportable($resource)
+                    || $this->operationsCenter->exportable($resource))
+                    ? route('admin.operational-records.export', ['resource' => $resource, ...$request->only(['search', 'status', 'category'])], false)
+                    : null,
+            'ordering' => [
+                'enabled' => ($this->courseCatalog->reorderable($resource) || $this->editorialCms->reorderable($resource))
+                    && $canManage
+                    && ($this->editorialCms->reorderable($resource) || $user->can('admin.catalog.reorder')),
+                'url' => ($this->courseCatalog->reorderable($resource) || $this->editorialCms->reorderable($resource))
+                    && $canManage
+                    && ($this->editorialCms->reorderable($resource) || $user->can('admin.catalog.reorder'))
+                    ? '/admin/'.$definition->path.'/reorder'
+                    : null,
+            ],
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(StoreAdminResourceRequest $request): RedirectResponse
     {
         $resource = $this->resource($request);
         $this->guardMutableResource($resource);
 
-        DB::transaction(function () use ($request, $resource): void {
-            $record = $this->persist($request, $resource);
+        $this->createAction->execute(
+            $request,
+            $resource,
+            fn (): Model => $this->persist($request, $resource),
+        );
 
-            $this->auditLogger->log(
-                $request,
-                "admin.{$resource}.created",
-                $record,
-                null,
-                $record->fresh()?->toArray(),
-            );
-        });
-
-        return back()->with('success', $this->definition($resource)['singular'].' created.');
+        return back()->with('success', $request->definition()->singular.' created.');
     }
 
-    public function update(Request $request, int $id): RedirectResponse
+    public function update(UpdateAdminResourceRequest $request, int $id): RedirectResponse
     {
         $resource = $this->resource($request);
         $this->guardMutableResource($resource);
         $record = $this->findRecord($resource, $id);
 
-        DB::transaction(function () use ($request, $resource, $record): void {
-            $before = $record->toArray();
+        $this->updateAction->execute($request, $resource, $record, function () use ($request, $resource, $record): Model {
             $fromStatus = $record->getAttribute('status') ?? $record->getAttribute('visibility');
             $updated = $this->persist($request, $resource, $record);
             $toStatus = $updated->getAttribute('status') ?? $updated->getAttribute('visibility');
 
             $this->recordApprovalIfNeeded($request, $resource, $updated, $fromStatus, $toStatus, $this->decisionNote($request));
-            $this->auditLogger->log(
-                $request,
-                "admin.{$resource}.updated",
-                $updated,
-                $before,
-                $updated->fresh()?->toArray(),
-            );
+
+            return $updated;
         });
 
-        return back()->with('success', $this->definition($resource)['singular'].' updated.');
+        return back()->with('success', $request->definition()->singular.' updated.');
     }
 
-    public function destroy(Request $request, int $id): RedirectResponse
+    public function destroy(DeleteAdminResourceRequest $request, int $id): RedirectResponse
     {
         $resource = $this->resource($request);
         $this->guardMutableResource($resource);
         $record = $this->findRecord($resource, $id);
-        $before = $record->toArray();
 
         $this->guardDeletion($request, $resource, $record);
 
-        DB::transaction(function () use ($request, $resource, $record, $before): void {
+        $this->deleteAction->execute($request, $resource, $record, function (Model $record): void {
             $this->markContentAsTrashed($record);
-            $this->auditLogger->log($request, "admin.{$resource}.deleted", $record, $before, $record->fresh()?->toArray());
             $record->delete();
         });
 
-        return back()->with('success', $this->definition($resource)['singular'].' deleted.');
+        return back()->with('success', $request->definition()->singular.' deleted.');
     }
 
-    public function bulk(Request $request): RedirectResponse
+    public function bulk(BulkAdminResourceRequest $request): RedirectResponse
     {
         $resource = $this->resource($request);
-        $this->guardMutableResource($resource);
-        $data = $request->validate([
-            'ids' => ['required', 'array', 'min:1'],
-            'ids.*' => ['integer'],
-            'action' => ['required', 'string'],
-            'value' => ['nullable', 'string', 'max:64'],
-            'note' => ['nullable', 'string', 'max:2000'],
-        ]);
+        $data = $request->validated();
 
-        $records = $this->queryFor($resource)
+        if ($this->operationsCenter->supports($resource)) {
+            $this->operationsCenterActions->bulk($request, $resource, $data);
+
+            return back()->with('success', 'Operational action queued or completed.');
+        }
+
+        $this->guardMutableResource($resource);
+
+        if ($this->courseCatalog->supports($resource)) {
+            $this->courseCatalog->validateBulk($request, $resource, $data);
+        }
+
+        $records = $this->queryFactory->make($resource)
             ->whereKey($data['ids'])
             ->get();
 
-        DB::transaction(function () use ($request, $resource, $records, $data): void {
+        $this->bulkAction->execute(function () use ($request, $resource, $records, $data): void {
             foreach ($records as $record) {
                 $before = $record->toArray();
 
@@ -270,452 +344,24 @@ class AdminOperationController extends Controller
         return back()->with('success', 'Bulk action completed.');
     }
 
-    /**
-     * @return array{title: string, singular: string, path: string}
-     */
-    private function definition(string $resource): array
-    {
-        return match ($resource) {
-            'users' => ['title' => 'Users', 'singular' => 'User', 'path' => '/admin/users'],
-            'roles' => ['title' => 'Roles', 'singular' => 'Role', 'path' => '/admin/roles'],
-            'permissions' => ['title' => 'Permissions', 'singular' => 'Permission', 'path' => '/admin/permissions'],
-            'bloggers' => ['title' => 'Blogger Approvals', 'singular' => 'Blogger profile', 'path' => '/admin/bloggers'],
-            'courses' => ['title' => 'Courses', 'singular' => 'Course', 'path' => '/admin/courses'],
-            'lessons' => ['title' => 'Lessons', 'singular' => 'Lesson', 'path' => '/admin/lessons'],
-            'blogs' => ['title' => 'Blogs', 'singular' => 'Blog post', 'path' => '/admin/blogs'],
-            'cms' => ['title' => 'CMS Pages', 'singular' => 'Page', 'path' => '/admin/cms'],
-            'home_hero' => ['title' => 'Home Hero', 'singular' => 'Home hero setting', 'path' => '/admin/cms/home-hero'],
-            'home_hero_slides' => ['title' => 'Home Hero Slides', 'singular' => 'Home hero slide', 'path' => '/admin/cms/home-hero-slides'],
-            'home_page_sections' => ['title' => 'Homepage Sections', 'singular' => 'Homepage section', 'path' => '/admin/cms/homepage-sections'],
-            'menus' => ['title' => 'Menus', 'singular' => 'Menu', 'path' => '/admin/menus'],
-            'media' => ['title' => 'Media Library', 'singular' => 'Media asset', 'path' => '/admin/media'],
-            'ad_zones' => ['title' => 'Ad Zones', 'singular' => 'Ad zone', 'path' => '/admin/ads/zones'],
-            'ad_campaigns' => ['title' => 'Ad Campaigns', 'singular' => 'Ad campaign', 'path' => '/admin/ads/campaigns'],
-            'ad_creatives' => ['title' => 'Ad Creatives', 'singular' => 'Ad creative', 'path' => '/admin/ads/creatives'],
-            'advertiser_requests' => ['title' => 'Advertiser Requests', 'singular' => 'Advertiser request', 'path' => '/admin/ads/advertiser-requests'],
-            'ad_pricing' => ['title' => 'Ad Pricing', 'singular' => 'Ad pricing setting', 'path' => '/admin/ads/pricing'],
-            'instructors' => ['title' => 'Instructor Profiles', 'singular' => 'Instructor profile', 'path' => '/admin/creators/instructors'],
-            'author_badges' => ['title' => 'Author Badges', 'singular' => 'Author badge', 'path' => '/admin/creators/badges'],
-            'editorial_revisions' => ['title' => 'Editorial Revisions', 'singular' => 'Editorial revision', 'path' => '/admin/editorial/revisions'],
-            'reviewer_comments' => ['title' => 'Reviewer Comments', 'singular' => 'Reviewer comment', 'path' => '/admin/editorial/comments'],
-            'scheduled_publications' => ['title' => 'Scheduled Publishing', 'singular' => 'Scheduled publication', 'path' => '/admin/editorial/scheduled'],
-            'revenue_share_rules' => ['title' => 'Revenue Share Rules', 'singular' => 'Revenue share rule', 'path' => '/admin/payments/revenue-share'],
-            'payment_products' => ['title' => 'Payment Products', 'singular' => 'Payment product', 'path' => '/admin/payments/products'],
-            'payment_prices' => ['title' => 'Payment Plans', 'singular' => 'Payment plan', 'path' => '/admin/payments/prices'],
-            'payment_discounts' => ['title' => 'Discounts & Coupons', 'singular' => 'Payment discount', 'path' => '/admin/growth/discounts'],
-            'payment_checkouts' => ['title' => 'Checkout Sessions', 'singular' => 'Checkout session', 'path' => '/admin/payments/checkouts'],
-            'payment_orders' => ['title' => 'Payment Orders', 'singular' => 'Payment order', 'path' => '/admin/payments/orders'],
-            'payment_subscriptions' => ['title' => 'Subscriptions', 'singular' => 'Subscription', 'path' => '/admin/payments/subscriptions'],
-            'team_accounts' => ['title' => 'Team Accounts', 'singular' => 'Team account', 'path' => '/admin/payments/teams'],
-            'team_seats' => ['title' => 'Team Seats', 'singular' => 'Team seat', 'path' => '/admin/payments/seats'],
-            'payment_reconciliation' => ['title' => 'Payment Reconciliation', 'singular' => 'Reconciliation record', 'path' => '/admin/payments/reconciliation'],
-            'gift_purchases' => ['title' => 'Gift Purchases', 'singular' => 'Gift purchase', 'path' => '/admin/growth/gifts'],
-            'affiliate_partners' => ['title' => 'Affiliate Partners', 'singular' => 'Affiliate partner', 'path' => '/admin/growth/affiliates'],
-            'affiliate_visits' => ['title' => 'Affiliate Visits', 'singular' => 'Affiliate visit', 'path' => '/admin/growth/affiliate-visits'],
-            'referral_conversions' => ['title' => 'Referral Conversions', 'singular' => 'Referral conversion', 'path' => '/admin/growth/referrals'],
-            'checkout_recoveries' => ['title' => 'Checkout Recoveries', 'singular' => 'Checkout recovery', 'path' => '/admin/growth/checkout-recoveries'],
-            'lead_magnets' => ['title' => 'Lead Magnets', 'singular' => 'Lead magnet', 'path' => '/admin/growth/lead-magnets'],
-            'newsletter_campaigns' => ['title' => 'Newsletter Campaigns', 'singular' => 'Newsletter campaign', 'path' => '/admin/growth/newsletters'],
-            'lead_submissions' => ['title' => 'Lead Submissions', 'singular' => 'Lead submission', 'path' => '/admin/growth/leads'],
-            'ab_experiments' => ['title' => 'A/B Experiments', 'singular' => 'A/B experiment', 'path' => '/admin/growth/experiments'],
-            'ab_variants' => ['title' => 'A/B Variants', 'singular' => 'A/B variant', 'path' => '/admin/growth/variants'],
-            'social_share_images' => ['title' => 'Social Share Images', 'singular' => 'Social share image', 'path' => '/admin/growth/social-images'],
-            'moderation_queue' => ['title' => 'Moderation Queue', 'singular' => 'Moderation item', 'path' => '/admin/community/moderation'],
-            'content_reports' => ['title' => 'Content Reports', 'singular' => 'Content report', 'path' => '/admin/community/reports'],
-            'blocked_words' => ['title' => 'Blocked Words', 'singular' => 'Blocked word', 'path' => '/admin/community/blocked-words'],
-            'discussion_forums' => ['title' => 'Discussion Forums', 'singular' => 'Discussion forum', 'path' => '/admin/community/forums'],
-            'discussion_threads' => ['title' => 'Discussion Threads', 'singular' => 'Discussion thread', 'path' => '/admin/community/threads'],
-            'community_groups' => ['title' => 'Community Groups', 'singular' => 'Community group', 'path' => '/admin/community/groups'],
-            'trash' => ['title' => 'Trash', 'singular' => 'Trash item', 'path' => '/admin/trash'],
-            'settings' => ['title' => 'Settings', 'singular' => 'Setting', 'path' => '/admin/settings'],
-            default => abort(404),
-        };
-    }
-
     private function resource(Request $request): string
     {
-        return (string) $request->route('resource');
+        $resource = (string) $request->route('resource');
+        $definition = $this->resourceRegistry->get($resource);
+
+        abort_unless($definition->domain === $this->domain(), 404);
+
+        return $resource;
     }
 
     private function guardMutableResource(string $resource): void
     {
         abort_if($resource === 'trash', 405, 'Use the trash restore or permanent delete actions.');
-    }
-
-    /**
-     * @return Builder<covariant Model>
-     */
-    private function queryFor(string $resource): Builder
-    {
-        return match ($resource) {
-            'users' => User::query()->with('roles')->latest(),
-            'roles' => Role::query()->with('permissions')->orderBy('name'),
-            'permissions' => Permission::query()->orderBy('name'),
-            'bloggers' => BloggerProfile::query()->with(['user.roles', 'reviewer', 'approvalHistories.actor'])->latest(),
-            'courses' => Course::query()
-                ->with(['category', 'subcategory', 'thumbnail', 'creator.bloggerProfile', 'ownershipVideo', 'approvalHistories.actor', 'deletionRequests'])
-                ->withCount(['sections', 'lessons', 'resources', 'faqs'])
-                ->latest(),
-            'lessons' => CourseLesson::query()->with(['course', 'section', 'videoFile', 'approvalHistories.actor'])->latest(),
-            'blogs' => BlogPost::query()->with(['category', 'author', 'featuredImage', 'tags', 'approvalHistories.actor', 'deletionRequests'])->latest(),
-            'cms' => Page::query()->with(['author', 'approvalHistories.actor'])->latest(),
-            'home_hero' => SiteSetting::query()->where('key', 'home.hero')->latest(),
-            'home_hero_slides' => HomeHeroSlide::query()->with('mediaAsset')->orderBy('sort_order')->latest(),
-            'home_page_sections' => HomePageSection::query()->orderBy('sort_order')->latest(),
-            'menus' => Menu::query()->withCount('items')->latest(),
-            'media' => MediaAsset::query()->with(['folder', 'uploader'])->latest(),
-            'ad_zones' => AdZone::query()->withCount(['creatives', 'impressions', 'clicks'])->latest(),
-            'ad_campaigns' => AdCampaign::query()->withCount(['creatives', 'reports'])->latest(),
-            'ad_creatives' => AdCreative::query()->with(['campaign', 'zone', 'mediaAsset'])->withCount(['impressions', 'clicks'])->latest(),
-            'advertiser_requests' => AdvertiserRequest::query()->with(['requestedZone', 'reviewer'])->latest(),
-            'ad_pricing' => AdPricingSetting::query()->with('zone')->latest(),
-            'instructors' => InstructorProfile::query()->with(['user', 'reviewer', 'avatar', 'approvalHistories.actor'])->latest(),
-            'author_badges' => AuthorBadge::query()->withCount('users')->orderBy('sort_order')->latest(),
-            'editorial_revisions' => EditorialRevision::query()->with(['author', 'reviewer', 'comments', 'editorialable', 'approvalHistories.actor'])->withCount('comments')->latest(),
-            'reviewer_comments' => ReviewerComment::query()->with(['revision', 'reviewer', 'resolver'])->latest(),
-            'scheduled_publications' => ScheduledPublication::query()->with(['revision', 'creator', 'approver'])->latest('publish_at'),
-            'revenue_share_rules' => RevenueShareRule::query()->with(['user', 'instructorProfile', 'course', 'paymentProduct'])->latest(),
-            'payment_products' => PaymentProduct::query()->with(['course', 'bundle', 'prices'])->withCount('prices')->latest(),
-            'payment_prices' => PaymentPrice::query()->with('product.course')->latest(),
-            'payment_discounts' => PaymentDiscount::query()->with(['product', 'price', 'course'])->withCount('redemptions')->latest(),
-            'payment_checkouts' => PaymentCheckout::query()->with(['user', 'price.product', 'course', 'teamAccount', 'discount'])->latest(),
-            'payment_orders' => PaymentOrder::query()->with(['user', 'teamAccount', 'checkout', 'items.product', 'items.price'])->latest(),
-            'payment_subscriptions' => PaymentSubscription::query()->with(['user', 'teamAccount', 'product', 'price'])->latest(),
-            'team_accounts' => TeamAccount::query()->with(['owner'])->withCount(['seats', 'entitlements'])->latest(),
-            'team_seats' => TeamSeat::query()->with(['teamAccount', 'user'])->latest(),
-            'payment_reconciliation' => PaymentReconciliationRecord::query()->latest(),
-            'gift_purchases' => GiftPurchase::query()->with(['purchaser', 'recipient', 'course', 'bundle', 'product', 'price', 'checkout'])->latest(),
-            'affiliate_partners' => AffiliatePartner::query()->with('user')->withCount(['visits', 'conversions'])->latest(),
-            'affiliate_visits' => AffiliateVisit::query()->with(['partner', 'conversions'])->latest('clicked_at'),
-            'referral_conversions' => ReferralConversion::query()->with(['partner', 'checkout', 'order', 'user'])->latest(),
-            'checkout_recoveries' => AbandonedCheckoutRecovery::query()->with(['checkout.price.product', 'checkout.user'])->latest(),
-            'lead_magnets' => LeadMagnet::query()->with('asset')->withCount('submissions')->latest(),
-            'newsletter_campaigns' => NewsletterCampaign::query()->with('leadMagnet')->withCount('submissions')->latest(),
-            'lead_submissions' => LeadSubmission::query()->with(['leadMagnet', 'newsletterCampaign', 'user'])->latest(),
-            'ab_experiments' => AbExperiment::query()->withCount('variants')->latest(),
-            'ab_variants' => AbVariant::query()->with('experiment')->withCount('assignments')->latest(),
-            'social_share_images' => SocialShareImage::query()->with('media')->latest(),
-            'moderation_queue' => ModerationQueueItem::query()->with(['reporter', 'assignee'])->latest(),
-            'content_reports' => ContentReport::query()->with(['reporter', 'reviewer'])->latest(),
-            'blocked_words' => BlockedWord::query()->latest(),
-            'discussion_forums' => DiscussionForum::query()->with(['course', 'category', 'creator'])->withCount('threads')->latest(),
-            'discussion_threads' => DiscussionThread::query()->with(['forum', 'user'])->withCount('posts')->latest(),
-            'community_groups' => CommunityGroup::query()->with(['course', 'creator'])->withCount('members')->latest(),
-            'settings' => SiteSetting::query()->latest(),
-            default => abort(404),
-        };
-    }
-
-    /**
-     * @param  Builder<covariant Model>  $query
-     * @return Builder<covariant Model>
-     */
-    private function applyFilters(Builder $query, string $resource, Request $request): Builder
-    {
-        $search = $request->query('search');
-        $status = $request->query('status');
-        $category = $request->query('category');
-        $role = $request->query('role');
-        $group = $request->query('group');
-
-        if (is_string($search) && filled($search)) {
-            $query = $this->applySearch($query, $resource, $search);
-        }
-
-        if (is_string($status) && filled($status)) {
-            $query = match ($resource) {
-                'users',
-                'bloggers',
-                'courses',
-                'lessons',
-                'blogs',
-                'cms',
-                'ad_zones',
-                'ad_campaigns',
-                'ad_creatives',
-                'advertiser_requests',
-                'instructors',
-                'editorial_revisions',
-                'scheduled_publications',
-                'revenue_share_rules',
-                'payment_products',
-                'payment_discounts',
-                'payment_checkouts',
-                'payment_orders',
-                'payment_subscriptions',
-                'team_accounts',
-                'team_seats',
-                'payment_reconciliation',
-                'gift_purchases',
-                'affiliate_partners',
-                'referral_conversions',
-                'checkout_recoveries',
-                'lead_magnets',
-                'newsletter_campaigns',
-                'lead_submissions',
-                'ab_experiments',
-                'social_share_images',
-                'moderation_queue',
-                'discussion_forums',
-                'discussion_threads',
-                'community_groups' => $query->where('status', $status),
-                'content_reports' => $query->where('status', $status),
-                'reviewer_comments' => $query->where('is_resolved', $status === 'resolved'),
-                'media' => $query->where('visibility', $status),
-                'ad_pricing', 'payment_prices', 'author_badges', 'blocked_words', 'home_page_sections' => $query->where('is_active', $status === 'active'),
-                default => $query,
-            };
-        }
-
-        if (is_string($category) && filled($category)) {
-            $query = match ($resource) {
-                'courses' => $query->where('course_category_id', $category),
-                'blogs' => $query->where('blog_category_id', $category),
-                'lessons' => $query->where('course_id', $category),
-                'ad_creatives', 'ad_pricing' => $query->where('ad_zone_id', $category),
-                'advertiser_requests' => $query->where('requested_ad_zone_id', $category),
-                'editorial_revisions' => $query->where('author_id', $category),
-                'reviewer_comments' => $query->where('reviewer_id', $category),
-                'scheduled_publications' => $query->where('created_by', $category),
-                'revenue_share_rules' => $query->where('course_id', $category),
-                'payment_products' => $query->where('type', $category),
-                'payment_discounts' => $query->where('payment_product_id', $category),
-                'payment_prices' => $query->where('payment_product_id', $category),
-                'payment_checkouts' => $query->where('payment_price_id', $category),
-                'payment_subscriptions' => $query->where('payment_product_id', $category),
-                'payment_orders' => $query->whereHas('items', fn (Builder $query) => $query->where('payment_product_id', $category)),
-                'team_seats' => $query->where('team_account_id', $category),
-                'gift_purchases' => $query->where('payment_product_id', $category),
-                'affiliate_visits', 'referral_conversions' => $query->where('affiliate_partner_id', $category),
-                'newsletter_campaigns', 'lead_submissions' => $query->where('lead_magnet_id', $category),
-                'ab_variants' => $query->where('ab_experiment_id', $category),
-                'discussion_forums', 'community_groups' => $query->where('course_id', $category),
-                'discussion_threads' => $query->where('discussion_forum_id', $category),
-                default => $query,
-            };
-        }
-
-        if ($resource === 'users' && is_string($role) && filled($role)) {
-            $query->whereHas('roles', fn (Builder $query) => $query->where('name', $role));
-        }
-
-        if ($resource === 'settings' && is_string($group) && filled($group)) {
-            $query->where('group', $group);
-        }
-
-        return $query;
-    }
-
-    /**
-     * @param  Builder<covariant Model>  $query
-     * @return Builder<covariant Model>
-     */
-    private function applySearch(Builder $query, string $resource, string $search): Builder
-    {
-        return match ($resource) {
-            'users' => $query->where(fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('email', 'like', "%{$search}%")),
-            'roles', 'permissions' => $query->where('name', 'like', "%{$search}%"),
-            'bloggers' => $query->whereHas('user', fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('email', 'like', "%{$search}%")),
-            'courses' => $query->where(fn (Builder $query) => $query
-                ->where('title', 'like', "%{$search}%")
-                ->orWhere('slug', 'like', "%{$search}%")),
-            'lessons' => $query->where(fn (Builder $query) => $query
-                ->where('title', 'like', "%{$search}%")
-                ->orWhere('slug', 'like', "%{$search}%")),
-            'blogs' => $query->where(fn (Builder $query) => $query
-                ->where('title', 'like', "%{$search}%")
-                ->orWhere('slug', 'like', "%{$search}%")),
-            'cms' => $query->where(fn (Builder $query) => $query
-                ->where('title', 'like', "%{$search}%")
-                ->orWhere('slug', 'like', "%{$search}%")),
-            'home_hero' => $query->where(fn (Builder $query) => $query
-                ->where('group', 'like', "%{$search}%")
-                ->orWhere('key', 'like', "%{$search}%")),
-            'home_hero_slides' => $query->where(fn (Builder $query) => $query
-                ->where('title', 'like', "%{$search}%")
-                ->orWhere('eyebrow', 'like', "%{$search}%")
-                ->orWhere('subtitle', 'like', "%{$search}%")
-                ->orWhere('target_url', 'like', "%{$search}%")),
-            'home_page_sections' => $query->where(fn (Builder $query) => $query
-                ->where('key', 'like', "%{$search}%")
-                ->orWhere('type', 'like', "%{$search}%")
-                ->orWhere('eyebrow', 'like', "%{$search}%")
-                ->orWhere('title', 'like', "%{$search}%")
-                ->orWhere('subtitle', 'like', "%{$search}%")),
-            'menus' => $query->where(fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('location', 'like', "%{$search}%")),
-            'media' => $query->where(fn (Builder $query) => $query
-                ->where('title', 'like', "%{$search}%")
-                ->orWhere('path', 'like', "%{$search}%")
-                ->orWhere('alt_text', 'like', "%{$search}%")),
-            'settings' => $query->where(fn (Builder $query) => $query
-                ->where('group', 'like', "%{$search}%")
-                ->orWhere('key', 'like', "%{$search}%")),
-            'ad_zones' => $query->where(fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('location', 'like', "%{$search}%")
-                ->orWhere('slug', 'like', "%{$search}%")),
-            'ad_campaigns' => $query->where(fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('advertiser_name', 'like', "%{$search}%")
-                ->orWhere('advertiser_email', 'like', "%{$search}%")),
-            'ad_creatives' => $query->where(fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('headline', 'like', "%{$search}%")),
-            'advertiser_requests' => $query->where(fn (Builder $query) => $query
-                ->where('company_name', 'like', "%{$search}%")
-                ->orWhere('contact_name', 'like', "%{$search}%")
-                ->orWhere('email', 'like', "%{$search}%")),
-            'ad_pricing' => $query->where(fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('currency', 'like', "%{$search}%")),
-            'instructors' => $query->where(fn (Builder $query) => $query
-                ->where('display_name', 'like', "%{$search}%")
-                ->orWhere('headline', 'like', "%{$search}%")
-                ->orWhere('expertise', 'like', "%{$search}%")
-                ->orWhereHas('user', fn (Builder $query) => $query
-                    ->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%"))),
-            'author_badges' => $query->where(fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('slug', 'like', "%{$search}%")),
-            'editorial_revisions' => $query->where(fn (Builder $query) => $query
-                ->where('title', 'like', "%{$search}%")
-                ->orWhere('summary', 'like', "%{$search}%")),
-            'reviewer_comments' => $query->where(fn (Builder $query) => $query
-                ->where('body', 'like', "%{$search}%")
-                ->orWhere('field_path', 'like', "%{$search}%")),
-            'scheduled_publications' => $query->where(fn (Builder $query) => $query
-                ->where('timezone', 'like', "%{$search}%")
-                ->orWhere('failure_reason', 'like', "%{$search}%")),
-            'revenue_share_rules' => $query->where(fn (Builder $query) => $query
-                ->where('notes', 'like', "%{$search}%")
-                ->orWhereHas('course', fn (Builder $query) => $query->where('title', 'like', "%{$search}%"))
-                ->orWhereHas('user', fn (Builder $query) => $query
-                    ->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%"))),
-            'payment_products' => $query->where(fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('slug', 'like', "%{$search}%")
-                ->orWhere('paddle_product_id', 'like', "%{$search}%")),
-            'payment_prices' => $query->where(fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('paddle_price_id', 'like', "%{$search}%")
-                ->orWhere('currency', 'like', "%{$search}%")),
-            'payment_discounts' => $query->where(fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('code', 'like', "%{$search}%")
-                ->orWhere('paddle_discount_id', 'like', "%{$search}%")),
-            'payment_checkouts' => $query->where(fn (Builder $query) => $query
-                ->where('paddle_transaction_id', 'like', "%{$search}%")
-                ->orWhere('checkout_url', 'like', "%{$search}%")
-                ->orWhereHas('user', fn (Builder $query) => $query
-                    ->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%"))),
-            'payment_orders' => $query->where(fn (Builder $query) => $query
-                ->where('paddle_transaction_id', 'like', "%{$search}%")
-                ->orWhere('paddle_customer_id', 'like', "%{$search}%")
-                ->orWhere('paddle_subscription_id', 'like', "%{$search}%")
-                ->orWhereHas('user', fn (Builder $query) => $query
-                    ->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%"))),
-            'payment_subscriptions' => $query->where(fn (Builder $query) => $query
-                ->where('paddle_subscription_id', 'like', "%{$search}%")
-                ->orWhere('paddle_customer_id', 'like', "%{$search}%")
-                ->orWhereHas('user', fn (Builder $query) => $query
-                    ->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%"))),
-            'team_accounts' => $query->where(fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('slug', 'like', "%{$search}%")
-                ->orWhere('paddle_customer_id', 'like', "%{$search}%")
-                ->orWhere('paddle_subscription_id', 'like', "%{$search}%")
-                ->orWhereHas('owner', fn (Builder $query) => $query
-                    ->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%"))),
-            'team_seats' => $query->where(fn (Builder $query) => $query
-                ->where('email', 'like', "%{$search}%")
-                ->orWhere('role', 'like', "%{$search}%")),
-            'payment_reconciliation' => $query->where(fn (Builder $query) => $query
-                ->where('event_id', 'like', "%{$search}%")
-                ->orWhere('record_type', 'like', "%{$search}%")
-                ->orWhere('paddle_transaction_id', 'like', "%{$search}%")
-                ->orWhere('paddle_subscription_id', 'like', "%{$search}%")
-                ->orWhere('paddle_customer_id', 'like', "%{$search}%")),
-            'gift_purchases' => $query->where(fn (Builder $query) => $query
-                ->where('recipient_email', 'like', "%{$search}%")
-                ->orWhere('recipient_name', 'like', "%{$search}%")
-                ->orWhere('code', 'like', "%{$search}%")),
-            'affiliate_partners' => $query->where(fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('code', 'like', "%{$search}%")
-                ->orWhere('payout_email', 'like', "%{$search}%")),
-            'affiliate_visits' => $query->where(fn (Builder $query) => $query
-                ->where('visitor_id', 'like', "%{$search}%")
-                ->orWhere('landing_url', 'like', "%{$search}%")
-                ->orWhereHas('partner', fn (Builder $query) => $query->where('code', 'like', "%{$search}%"))),
-            'referral_conversions' => $query->where(fn (Builder $query) => $query
-                ->whereHas('partner', fn (Builder $query) => $query
-                    ->where('name', 'like', "%{$search}%")
-                    ->orWhere('code', 'like', "%{$search}%"))
-                ->orWhereHas('user', fn (Builder $query) => $query
-                    ->where('email', 'like', "%{$search}%"))),
-            'checkout_recoveries' => $query->where(fn (Builder $query) => $query
-                ->where('email', 'like', "%{$search}%")
-                ->orWhere('recovery_token', 'like', "%{$search}%")
-                ->orWhere('recovery_url', 'like', "%{$search}%")),
-            'lead_magnets' => $query->where(fn (Builder $query) => $query
-                ->where('title', 'like', "%{$search}%")
-                ->orWhere('slug', 'like', "%{$search}%")
-                ->orWhere('description', 'like', "%{$search}%")),
-            'newsletter_campaigns' => $query->where(fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('slug', 'like', "%{$search}%")
-                ->orWhere('subject', 'like', "%{$search}%")),
-            'lead_submissions' => $query->where(fn (Builder $query) => $query
-                ->where('email', 'like', "%{$search}%")
-                ->orWhere('name', 'like', "%{$search}%")),
-            'ab_experiments' => $query->where(fn (Builder $query) => $query
-                ->where('key', 'like', "%{$search}%")
-                ->orWhere('name', 'like', "%{$search}%")
-                ->orWhere('surface', 'like', "%{$search}%")),
-            'ab_variants' => $query->where(fn (Builder $query) => $query
-                ->where('key', 'like', "%{$search}%")
-                ->orWhere('name', 'like', "%{$search}%")
-                ->orWhereHas('experiment', fn (Builder $query) => $query->where('key', 'like', "%{$search}%"))),
-            'social_share_images' => $query->where(fn (Builder $query) => $query
-                ->where('title', 'like', "%{$search}%")
-                ->orWhere('template', 'like', "%{$search}%")
-                ->orWhere('image_url', 'like', "%{$search}%")),
-            'moderation_queue' => $query->where(fn (Builder $query) => $query
-                ->where('reason', 'like', "%{$search}%")
-                ->orWhere('resolution_note', 'like', "%{$search}%")),
-            'content_reports' => $query->where(fn (Builder $query) => $query
-                ->where('reason', 'like', "%{$search}%")
-                ->orWhere('details', 'like', "%{$search}%")
-                ->orWhere('resolution_note', 'like', "%{$search}%")),
-            'blocked_words' => $query->where(fn (Builder $query) => $query
-                ->where('word', 'like', "%{$search}%")
-                ->orWhere('notes', 'like', "%{$search}%")),
-            'discussion_forums' => $query->where(fn (Builder $query) => $query
-                ->where('title', 'like', "%{$search}%")
-                ->orWhere('slug', 'like', "%{$search}%")
-                ->orWhere('description', 'like', "%{$search}%")),
-            'discussion_threads' => $query->where(fn (Builder $query) => $query
-                ->where('title', 'like', "%{$search}%")
-                ->orWhere('slug', 'like', "%{$search}%")
-                ->orWhere('body', 'like', "%{$search}%")),
-            'community_groups' => $query->where(fn (Builder $query) => $query
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('slug', 'like', "%{$search}%")
-                ->orWhere('description', 'like', "%{$search}%")),
-            default => $query,
-        };
+        abort_if($this->editorialCms->readOnly($resource), 405, 'This history resource is read-only.');
+        abort_if($this->learningAdministration->readOnly($resource), 405, 'This learning activity record is read-only. Use its controlled review action.');
+        abort_if($this->commerceOperations->readOnly($resource), 405, 'This financial record is read-only. Use an authorized operational action.');
+        abort_if($this->communityOperations->readOnly($resource), 405, 'This community activity record is read-only. Use an authorized moderation action.');
+        abort_if($this->operationsCenter->readOnly($resource), 405, 'This operational evidence is read-only. Use an authorized operational action.');
     }
 
     /**
@@ -795,6 +441,30 @@ class AdminOperationController extends Controller
      */
     private function columnsFor(string $resource): array
     {
+        if ($this->courseCatalog->supports($resource)) {
+            return $this->courseCatalog->columns($resource);
+        }
+
+        if ($this->editorialCms->supports($resource)) {
+            return $this->editorialCms->columns($resource);
+        }
+
+        if ($this->learningAdministration->supports($resource)) {
+            return $this->learningAdministration->columns($resource);
+        }
+
+        if ($this->commerceOperations->supports($resource)) {
+            return $this->commerceOperations->columns($resource);
+        }
+
+        if ($this->communityOperations->supports($resource)) {
+            return $this->communityOperations->columns($resource);
+        }
+
+        if ($this->operationsCenter->supports($resource)) {
+            return $this->operationsCenter->columns($resource);
+        }
+
         return match ($resource) {
             'users' => $this->columns(['name', 'email', 'status', 'roles', 'created_at']),
             'roles' => $this->columns(['name', 'permissions_count', 'permissions']),
@@ -867,8 +537,32 @@ class AdminOperationController extends Controller
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function fieldsFor(string $resource): array
+    private function fieldsFor(string $resource, bool $canCreateCategory = false): array
     {
+        if ($this->courseCatalog->supports($resource)) {
+            return $this->courseCatalog->fields($resource);
+        }
+
+        if ($this->editorialCms->supports($resource)) {
+            return $this->editorialCms->fields($resource);
+        }
+
+        if ($this->learningAdministration->supports($resource)) {
+            return $this->learningAdministration->fields($resource);
+        }
+
+        if ($this->commerceOperations->supports($resource)) {
+            return $this->commerceOperations->fields($resource);
+        }
+
+        if ($this->communityOperations->supports($resource)) {
+            return $this->communityOperations->fields($resource);
+        }
+
+        if ($this->operationsCenter->supports($resource)) {
+            return $this->operationsCenter->fields($resource);
+        }
+
         return match ($resource) {
             'users' => [
                 $this->field('name', 'Name', 'text', required: true),
@@ -895,8 +589,16 @@ class AdminOperationController extends Controller
             ],
             'courses' => [
                 $this->field('title', 'Title', 'text', required: true),
-                $this->field('course_category_id', 'Category', 'select', $this->courseCategoryOptions()),
-                $this->field('course_subcategory_id', 'Subcategory', 'select', $this->courseSubcategoryOptions()),
+                $this->field('course_category_id', 'Category', 'select', $this->courseCategoryOptions()) + ($canCreateCategory ? [
+                    'inlineCreate' => [
+                        'label' => 'Add Category',
+                        'url' => '/admin/course-categories/quick',
+                    ],
+                ] : []),
+                $this->field('course_subcategory_id', 'Subcategory', 'select', $this->courseSubcategoryOptions()) + [
+                    'dependsOn' => 'course_category_id',
+                    'optionsUrl' => '/admin/catalog/course-categories/{value}/subcategories',
+                ],
                 $this->field('thumbnail_media_id', 'Thumbnail', 'media'),
                 $this->field('ownership_video_media_id', 'Ownership Video', 'media'),
                 $this->field('ownership_video_url', 'Ownership Video URL', 'text'),
@@ -918,7 +620,7 @@ class AdminOperationController extends Controller
                 $this->field('course_section_id', 'Section', 'select', $this->courseSectionOptions()),
                 $this->field('title', 'Title', 'text', required: true),
                 $this->field('order_number', 'Order', 'number'),
-                $this->field('content', 'Content', 'textarea'),
+                $this->field('content', 'Content', 'richtext'),
                 $this->field('video_type', 'Video Type', 'select', $this->enumOptions(VideoType::cases()), true),
                 $this->field('video_url', 'Video URL', 'text'),
                 $this->field('video_file_id', 'Video File', 'media'),
@@ -937,8 +639,8 @@ class AdminOperationController extends Controller
                 $this->field('author_id', 'Author', 'select', $this->userOptions()),
                 $this->field('featured_image_media_id', 'Featured Image', 'media'),
                 $this->field('blog_tag_ids', 'Tags', 'multiselect', $this->blogTagOptions()),
-                $this->field('excerpt', 'Excerpt', 'textarea'),
-                $this->field('content', 'Content', 'textarea'),
+                $this->field('excerpt', 'Excerpt (Short Summary)', 'textarea'),
+                $this->field('content', 'Content', 'richtext'),
                 $this->field('status', 'Status', 'select', $this->blogWorkflowStatusOptions(), true),
                 $this->field('is_featured', 'Featured', 'checkbox'),
                 $this->field('seo_title', 'SEO Title', 'text'),
@@ -950,7 +652,7 @@ class AdminOperationController extends Controller
                 $this->field('title', 'Title', 'text', required: true),
                 $this->field('author_id', 'Author', 'select', $this->userOptions()),
                 $this->field('excerpt', 'Excerpt', 'textarea'),
-                $this->field('content', 'Content', 'textarea'),
+                $this->field('content', 'Content', 'richtext'),
                 $this->field('template', 'Template', 'text'),
                 $this->field('sort_order', 'Sort Order', 'number'),
                 $this->field('status', 'Status', 'select', $this->standardPublishStatusOptions(), true),
@@ -1491,6 +1193,30 @@ class AdminOperationController extends Controller
      */
     private function filtersFor(string $resource): array
     {
+        if ($this->courseCatalog->supports($resource)) {
+            return $this->courseCatalog->filters($resource);
+        }
+
+        if ($this->editorialCms->supports($resource)) {
+            return $this->editorialCms->filters($resource);
+        }
+
+        if ($this->learningAdministration->supports($resource)) {
+            return $this->learningAdministration->filters($resource);
+        }
+
+        if ($this->commerceOperations->supports($resource)) {
+            return $this->commerceOperations->filters($resource);
+        }
+
+        if ($this->communityOperations->supports($resource)) {
+            return $this->communityOperations->filters($resource);
+        }
+
+        if ($this->operationsCenter->supports($resource)) {
+            return $this->operationsCenter->filters($resource);
+        }
+
         $filters = [
             $this->field('search', 'Search', 'search'),
         ];
@@ -1629,6 +1355,30 @@ class AdminOperationController extends Controller
      */
     private function bulkActionsFor(string $resource): array
     {
+        if ($this->courseCatalog->supports($resource)) {
+            return $this->courseCatalog->bulkActions($resource);
+        }
+
+        if ($this->editorialCms->supports($resource)) {
+            return $this->editorialCms->bulkActions($resource);
+        }
+
+        if ($this->learningAdministration->supports($resource)) {
+            return $this->learningAdministration->bulkActions($resource);
+        }
+
+        if ($this->commerceOperations->supports($resource)) {
+            return $this->commerceOperations->bulkActions($resource);
+        }
+
+        if ($this->communityOperations->supports($resource)) {
+            return $this->communityOperations->bulkActions($resource);
+        }
+
+        if ($this->operationsCenter->supports($resource)) {
+            return $this->operationsCenter->bulkActions($resource);
+        }
+
         return match ($resource) {
             'users' => [
                 $this->bulkAction('status', 'Set Status', $this->enumOptions(UserStatus::cases())),
@@ -1810,6 +1560,30 @@ class AdminOperationController extends Controller
      */
     private function rowFor(string $resource, Model $record): array
     {
+        if ($this->courseCatalog->supports($resource)) {
+            return $this->courseCatalog->row($resource, $record);
+        }
+
+        if ($this->editorialCms->supports($resource)) {
+            return $this->editorialCms->row($resource, $record);
+        }
+
+        if ($this->learningAdministration->supports($resource)) {
+            return $this->learningAdministration->row($resource, $record);
+        }
+
+        if ($this->commerceOperations->supports($resource)) {
+            return $this->commerceOperations->row($resource, $record);
+        }
+
+        if ($this->communityOperations->supports($resource)) {
+            return $this->communityOperations->row($resource, $record);
+        }
+
+        if ($this->operationsCenter->supports($resource)) {
+            return $this->operationsCenter->row($resource, $record);
+        }
+
         return match ($resource) {
             'users' => $this->userRow($record),
             'roles' => $this->roleRow($record),
@@ -2226,6 +2000,9 @@ class AdminOperationController extends Controller
                 'location' => $record->location,
                 'is_active' => $record->is_active,
             ],
+            'workflow_actions' => [
+                $this->workflowAction('Build Menu', route('admin.menus.builder.show', $record, false), 'default', 'get'),
+            ],
         ];
     }
 
@@ -2243,6 +2020,7 @@ class AdminOperationController extends Controller
             'mime_type' => $record->mime_type,
             'dimensions' => $record->width && $record->height ? "{$record->width}x{$record->height}" : null,
             'path' => $record->path,
+            'usages_count' => $record->usages_count ?? $record->usages->count(),
             'preview_url' => $record->url,
             'form' => Arr::only($record->toArray(), [
                 'folder_id',
@@ -2257,6 +2035,10 @@ class AdminOperationController extends Controller
                 'width',
                 'height',
             ]) + ['visibility' => $this->enumValue($record->visibility)],
+            'review_items' => $record->usages->take(8)->map(fn ($usage): array => [
+                'label' => $usage->collection ?: 'Usage',
+                'value' => class_basename((string) $usage->mediable_type).' #'.$usage->mediable_id,
+            ])->values()->all(),
         ];
     }
 
@@ -2544,7 +2326,10 @@ class AdminOperationController extends Controller
                 'scheduled_at' => $this->dateTimeString($record->getAttribute('scheduled_at')),
             ],
             'history' => $this->historyRows($record),
-            'workflow_actions' => $this->editorialRevisionWorkflowActions($record),
+            'workflow_actions' => [
+                ...$this->editorialRevisionWorkflowActions($record),
+                $this->workflowAction('Compare', route('admin.editorial.revisions.review', $record, false), 'default', 'get'),
+            ],
         ];
     }
 
@@ -3423,11 +3208,23 @@ class AdminOperationController extends Controller
 
     private function findRecord(string $resource, int $id): Model
     {
-        return $this->queryFor($resource)->whereKey($id)->firstOrFail();
+        return $this->queryFactory->make($resource)->whereKey($id)->firstOrFail();
     }
 
     private function persist(Request $request, string $resource, ?Model $record = null): Model
     {
+        if ($this->courseCatalog->supports($resource)) {
+            return $this->courseCatalog->persist($request, $resource, $record);
+        }
+
+        if ($this->editorialCms->supports($resource)) {
+            return $this->editorialCms->persist($request, $resource, $record);
+        }
+
+        if ($this->learningAdministration->supports($resource)) {
+            return $this->learningAdministration->persist($request, $resource, $record);
+        }
+
         return match ($resource) {
             'users' => $this->persistUser($request, $record),
             'roles' => $this->persistRole($request, $record),
@@ -3486,6 +3283,8 @@ class AdminOperationController extends Controller
 
     private function persistUser(Request $request, ?Model $record): User
     {
+        abort_unless($request->user()?->can('admin.roles.assign'), 403);
+
         $user = $record instanceof User ? $record : new User;
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -3510,6 +3309,8 @@ class AdminOperationController extends Controller
 
     private function persistRole(Request $request, ?Model $record): Role
     {
+        abort_unless($request->user()?->can('admin.roles.assign'), 403);
+
         $role = $record instanceof Role ? $record : new Role(['guard_name' => 'web']);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('roles', 'name')->ignore($role->id)],
@@ -3575,8 +3376,15 @@ class AdminOperationController extends Controller
     {
         $course = $record instanceof Course ? $record : new Course(['created_by' => $request->user()?->id]);
         $data = $this->validatedContent($request, [
-            'course_category_id' => ['nullable', Rule::exists('course_categories', 'id')],
-            'course_subcategory_id' => ['nullable', Rule::exists('course_subcategories', 'id')],
+            'course_category_id' => ['nullable', Rule::exists('course_categories', 'id')->whereNull('deleted_at')],
+            'course_subcategory_id' => [
+                'nullable',
+                Rule::exists('course_subcategories', 'id')->where(
+                    fn ($query) => $query
+                        ->where('course_category_id', $request->input('course_category_id'))
+                        ->whereNull('deleted_at'),
+                ),
+            ],
             'thumbnail_media_id' => ['nullable', Rule::exists('media_assets', 'id')],
             'ownership_video_media_id' => ['nullable', Rule::exists('media_assets', 'id')],
             'ownership_video_url' => ['nullable', 'string', 'max:2048'],
@@ -3627,11 +3435,11 @@ class AdminOperationController extends Controller
             'blog_category_id' => ['nullable', Rule::exists('blog_categories', 'id')],
             'author_id' => ['nullable', Rule::exists('users', 'id')],
             'featured_image_media_id' => ['nullable', Rule::exists('media_assets', 'id')],
-            'excerpt' => ['nullable', 'string'],
+            'excerpt' => ['nullable', 'string', 'max:500'],
             'content' => ['nullable', 'string'],
             'is_featured' => ['boolean'],
-            'blog_tag_ids' => ['array'],
-            'blog_tag_ids.*' => ['integer', Rule::exists('blog_tags', 'id')],
+            'blog_tag_ids' => ['array', 'max:50'],
+            'blog_tag_ids.*' => ['integer', 'distinct', Rule::exists('blog_tags', 'id')],
         ]);
 
         $tagIds = $data['blog_tag_ids'] ?? [];
@@ -3644,6 +3452,7 @@ class AdminOperationController extends Controller
             abort(422, 'Approve this blog before publishing it.');
         }
 
+        $data['content'] = $this->contentSanitizer->richText($data['content'] ?? '');
         $post->fill($data);
         $this->syncPublishedAt($post);
         $post->save();
@@ -3664,6 +3473,7 @@ class AdminOperationController extends Controller
             'seo_image' => ['nullable', 'string', 'max:255'],
         ]);
 
+        $data['content'] = $this->contentSanitizer->richText($data['content'] ?? '');
         $page->fill($data);
         $this->syncPublishedAt($page);
         $page->save();
@@ -4894,6 +4704,18 @@ class AdminOperationController extends Controller
 
     private function applyBulkMutation(string $resource, Model $record, string $action, ?string $value, ?string $note, Request $request): void
     {
+        if ($this->courseCatalog->applyBulkMutation($resource, $record, $action, $value)) {
+            return;
+        }
+
+        if ($this->editorialCms->applyBulkMutation($resource, $record, $action, $value)) {
+            return;
+        }
+
+        if ($this->learningAdministration->applyBulkMutation($resource, $record, $action, $value)) {
+            return;
+        }
+
         if ($resource === 'media' && $action === 'visibility') {
             $record->setAttribute('visibility', $value);
             $record->save();
@@ -5082,6 +4904,22 @@ class AdminOperationController extends Controller
 
     private function guardDeletion(Request $request, string $resource, Model $record): void
     {
+        if ($this->courseCatalog->supports($resource)) {
+            $this->courseCatalog->guardDeletion($resource, $record);
+        }
+
+        if ($this->editorialCms->supports($resource)) {
+            $this->editorialCms->guardDeletion($resource, $record);
+        }
+
+        if ($this->learningAdministration->supports($resource)) {
+            $this->learningAdministration->guardDeletion($resource, $record);
+        }
+
+        if ($record instanceof MediaAsset && $record->usages()->exists()) {
+            abort(422, 'This media asset is still referenced by published or managed content.');
+        }
+
         if ($resource === 'users' && $record instanceof User && $request->user()?->is($record)) {
             abort(422, 'You cannot delete your own account.');
         }
@@ -5106,6 +4944,30 @@ class AdminOperationController extends Controller
      */
     private function metricsFor(string $resource): array
     {
+        if ($this->courseCatalog->supports($resource)) {
+            return $this->courseCatalog->metrics($resource);
+        }
+
+        if ($this->editorialCms->supports($resource)) {
+            return $this->editorialCms->metrics($resource);
+        }
+
+        if ($this->learningAdministration->supports($resource)) {
+            return $this->learningAdministration->metrics($resource);
+        }
+
+        if ($this->commerceOperations->supports($resource)) {
+            return $this->commerceOperations->metrics($resource);
+        }
+
+        if ($this->communityOperations->supports($resource)) {
+            return $this->communityOperations->metrics($resource);
+        }
+
+        if ($this->operationsCenter->supports($resource)) {
+            return $this->operationsCenter->metrics($resource);
+        }
+
         return match ($resource) {
             'users' => ['total' => User::count(), 'active' => User::query()->where('status', UserStatus::Active->value)->count()],
             'bloggers' => ['pending' => BloggerProfile::query()->where('status', BloggerStatus::Pending->value)->count(), 'approved' => BloggerProfile::query()->where('status', BloggerStatus::Approved->value)->count()],
@@ -5162,7 +5024,7 @@ class AdminOperationController extends Controller
                 'courses' => Course::onlyTrashed()->count(),
                 'blogs' => BlogPost::onlyTrashed()->count(),
             ],
-            default => ['total' => $this->queryFor($resource)->count()],
+            default => ['total' => $this->queryFactory->make($resource)->count()],
         };
     }
 
@@ -5256,20 +5118,21 @@ class AdminOperationController extends Controller
      */
     private function courseCategoryOptions(): array
     {
-        return CourseCategory::query()->orderBy('name')->get()->map(fn (CourseCategory $category): array => [
-            'label' => $category->name,
+        return CourseCategory::query()->orderBy('sort_order')->orderBy('name')->get()->map(fn (CourseCategory $category): array => [
+            'label' => $category->name.($category->is_active ? '' : ' (Inactive)'),
             'value' => $category->id,
         ])->values()->all();
     }
 
     /**
-     * @return array<int, array{label: string, value: int|string}>
+     * @return array<int, array{label: string, value: int|string, parentValue: int}>
      */
     private function courseSubcategoryOptions(): array
     {
-        return CourseSubcategory::query()->orderBy('name')->get()->map(fn (CourseSubcategory $subcategory): array => [
-            'label' => $subcategory->name,
+        return CourseSubcategory::query()->orderBy('course_category_id')->orderBy('sort_order')->orderBy('name')->get()->map(fn (CourseSubcategory $subcategory): array => [
+            'label' => $subcategory->name.($subcategory->is_active ? '' : ' (Inactive)'),
             'value' => $subcategory->id,
+            'parentValue' => $subcategory->course_category_id,
         ])->values()->all();
     }
 
@@ -5639,6 +5502,9 @@ class AdminOperationController extends Controller
      */
     private function courseWorkflowActions(Course $course): array
     {
+        $actions = [
+            $this->workflowAction('Builder', route('admin.courses.builder.show', $course, false), 'default', 'get'),
+        ];
         $status = $this->statusValue($course->getAttribute('status'));
 
         if ($status === PublishStatus::Pending->value) {
@@ -5646,6 +5512,7 @@ class AdminOperationController extends Controller
                 $this->workflowAction('Approve', route('admin.course-workflow.courses.approve', $course, false), 'success'),
                 $this->workflowAction('Changes', route('admin.course-workflow.courses.changes-requested', $course, false), 'warning'),
                 $this->workflowAction('Reject', route('admin.course-workflow.courses.reject', $course, false), 'danger'),
+                ...$actions,
             ];
         }
 
@@ -5657,11 +5524,12 @@ class AdminOperationController extends Controller
                 return [
                     $this->workflowAction('Trash', route('admin.course-workflow.deletions.approve', $deletionRequest, false), 'danger'),
                     $this->workflowAction('Keep', route('admin.course-workflow.deletions.reject', $deletionRequest, false), 'warning'),
+                    ...$actions,
                 ];
             }
         }
 
-        return [];
+        return $actions;
     }
 
     /**

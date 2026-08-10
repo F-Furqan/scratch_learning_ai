@@ -5,6 +5,7 @@ namespace App\Services\Payments;
 use App\Contracts\Payments\PaddleClient;
 use App\Enums\PaymentBillingInterval;
 use App\Models\PaymentCheckout;
+use App\Models\PaymentOrder;
 use App\Models\PaymentPrice;
 use App\Models\PaymentProduct;
 use Illuminate\Http\Client\PendingRequest;
@@ -95,6 +96,23 @@ class PaddleBillingClient implements PaddleClient
                 'url' => config('payments.paddle.checkout_success_url'),
             ],
         ], static fn (mixed $value): bool => $value !== null));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function refundTransaction(PaymentOrder $order, string $reason): array
+    {
+        if (blank($order->paddle_transaction_id)) {
+            throw new RuntimeException('The payment order does not have a Paddle transaction ID.');
+        }
+
+        return $this->post('/adjustments', [
+            'action' => 'refund',
+            'type' => 'full',
+            'transaction_id' => $order->paddle_transaction_id,
+            'reason' => $reason,
+        ]);
     }
 
     /**

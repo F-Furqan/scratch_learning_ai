@@ -7,7 +7,15 @@ use App\Contracts\Navigation\DashboardDestinationResolver;
 use App\Contracts\Operations\ManagedSnapshotProvider;
 use App\Contracts\Payments\PaddleClient;
 use App\Enums\RoleName;
+use App\Models\AdCreative;
+use App\Models\BlogPost;
+use App\Models\Course;
+use App\Models\CourseLesson;
+use App\Models\CourseResource;
+use App\Models\HomeHeroSlide;
+use App\Models\InstructorProfile;
 use App\Models\User;
+use App\Observers\MediaUsageObserver;
 use App\Services\Access\RoleBasedAdminAccessService;
 use App\Services\Navigation\RoleBasedDashboardDestinationResolver;
 use App\Services\Operations\ApplicationHealthCheck;
@@ -90,6 +98,7 @@ class AppServiceProvider extends ServiceProvider
         $this->configureRateLimiting();
         $this->configureMonitoring();
         $this->configureQueueFailureAlerts();
+        $this->configureMediaUsageTracking();
     }
 
     /**
@@ -184,5 +193,20 @@ class AppServiceProvider extends ServiceProvider
                 ],
             );
         });
+    }
+
+    protected function configureMediaUsageTracking(): void
+    {
+        foreach ([
+            Course::class,
+            CourseLesson::class,
+            CourseResource::class,
+            BlogPost::class,
+            HomeHeroSlide::class,
+            InstructorProfile::class,
+            AdCreative::class,
+        ] as $model) {
+            $model::observe(MediaUsageObserver::class);
+        }
     }
 }

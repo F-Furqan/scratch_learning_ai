@@ -185,7 +185,7 @@ class PublicContentPresenter
 
         return [
             ...$this->lessonCard($lesson, $course, $user),
-            'content' => $locked ? null : $this->sanitizer->plainText($lesson->content),
+            'content' => $locked ? null : $this->sanitizer->richText($lesson->content),
             'video_type' => $this->enumValue($lesson->getAttribute('video_type')),
             'video_url' => $locked ? null : $lesson->video_url,
             'section' => $lesson->section ? [
@@ -232,7 +232,7 @@ class PublicContentPresenter
     {
         return [
             ...$this->blogCard($post),
-            'content' => $this->sanitizer->plainText($post->content),
+            'content' => $this->sanitizer->richText($post->content),
             'faqs' => $this->faqs($post->faqs),
         ];
     }
@@ -248,14 +248,14 @@ class PublicContentPresenter
             'slug' => $page->slug,
             'url' => route('public.pages.show', $page->slug),
             'excerpt' => $this->sanitizer->plainText($page->excerpt),
-            'content' => $this->sanitizer->plainText($page->content),
+            'content' => $this->sanitizer->richText($page->content),
             'template' => $page->template,
             'blocks' => $page->blocks
                 ->map(fn ($block): array => [
                     'id' => $block->id,
                     'key' => $block->key,
                     'title' => $this->sanitizer->plainText($block->title),
-                    'body' => $this->sanitizer->plainText($block->body),
+                    'body' => $this->sanitizer->richText($block->body),
                     'settings' => $block->settings,
                 ])
                 ->values()

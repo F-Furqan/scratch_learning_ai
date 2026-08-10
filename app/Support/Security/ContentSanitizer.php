@@ -2,10 +2,40 @@
 
 namespace App\Support\Security;
 
+use HTMLPurifier;
+use HTMLPurifier_Config;
 use Illuminate\Support\Str;
 
 class ContentSanitizer
 {
+    private readonly HTMLPurifier $purifier;
+
+    public function __construct()
+    {
+        $config = HTMLPurifier_Config::createDefault();
+        $config->set('Core.Encoding', 'UTF-8');
+        $config->set('HTML.Allowed', 'p,br,strong,b,em,i,u,s,blockquote,ul,ol,li,h2,h3,h4,pre,code[class],a[href|title|target|rel],hr');
+        $config->set('Attr.AllowedFrameTargets', ['_blank']);
+        $config->set('HTML.Nofollow', true);
+        $config->set('URI.AllowedSchemes', [
+            'http' => true,
+            'https' => true,
+            'mailto' => true,
+        ]);
+        $config->set('Cache.SerializerPath', storage_path('framework/cache'));
+
+        $this->purifier = new HTMLPurifier($config);
+    }
+
+    public function richText(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return trim($this->purifier->purify($value));
+    }
+
     public function plainText(?string $value): ?string
     {
         if ($value === null) {

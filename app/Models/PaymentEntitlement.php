@@ -48,6 +48,22 @@ class PaymentEntitlement extends Model
     }
 
     /**
+     * @return BelongsTo<PaymentOrder, $this>
+     */
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(PaymentOrder::class, 'payment_order_id');
+    }
+
+    /**
+     * @return BelongsTo<PaymentSubscription, $this>
+     */
+    public function subscription(): BelongsTo
+    {
+        return $this->belongsTo(PaymentSubscription::class, 'payment_subscription_id');
+    }
+
+    /**
      * @return MorphTo<Model, $this>
      */
     public function entitlementable(): MorphTo
