@@ -99,6 +99,105 @@ class EditorialCmsManagementTest extends TestCase
         $this->assertDatabaseHas('blog_categories', ['id' => $category->id]);
     }
 
+    public function test_blog_tags_support_single_and_atomic_bulk_deletion(): void
+    {
+        $single = BlogTag::factory()->create();
+        $bulkTags = BlogTag::factory()->count(2)->create();
+
+        $this->actingAs($this->admin)
+            ->from('/admin/blog-tags')
+            ->delete(route('admin.blog-tags.destroy', $single))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success')
+            ->assertRedirect('/admin/blog-tags');
+
+        $this->actingAs($this->admin)
+            ->from('/admin/blog-tags')
+            ->post(route('admin.blog-tags.bulk'), [
+                'ids' => $bulkTags->modelKeys(),
+                'action' => 'delete',
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success')
+            ->assertRedirect('/admin/blog-tags');
+
+        $this->assertDatabaseMissing('blog_tags', ['id' => $single->id]);
+        foreach ($bulkTags as $tag) {
+            $this->assertDatabaseMissing('blog_tags', ['id' => $tag->id]);
+        }
+    }
+
+    public function test_protected_bulk_deletion_rolls_back_every_selected_record(): void
+    {
+        $unused = BlogCategory::factory()->create();
+        $inUse = BlogCategory::factory()->create();
+        BlogPost::factory()->create(['blog_category_id' => $inUse->id]);
+
+        $this->actingAs($this->admin)
+            ->from('/admin/blog-categories')
+            ->post(route('admin.blog-categories.bulk'), [
+                'ids' => [$unused->id, $inUse->id],
+                'action' => 'delete',
+            ])
+            ->assertSessionHasErrors('delete')
+            ->assertRedirect('/admin/blog-categories');
+
+        $this->assertDatabaseHas('blog_categories', ['id' => $unused->id]);
+        $this->assertDatabaseHas('blog_categories', ['id' => $inUse->id]);
+    }
+
+    public function test_blog_categories_can_reassign_posts_before_bulk_deletion(): void
+    {
+        $replacement = BlogCategory::factory()->create();
+        $sources = BlogCategory::factory()->count(2)->create();
+        $posts = $sources->map(fn (BlogCategory $category): BlogPost => BlogPost::factory()->create([
+            'blog_category_id' => $category->id,
+        ]));
+
+        $this->actingAs($this->admin)
+            ->from('/admin/blog-categories')
+            ->post(route('admin.blog-categories.bulk'), [
+                'ids' => $sources->modelKeys(),
+                'action' => 'reassign_delete',
+                'value' => (string) $replacement->id,
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success')
+            ->assertRedirect('/admin/blog-categories');
+
+        foreach ($sources as $source) {
+            $this->assertDatabaseMissing('blog_categories', ['id' => $source->id]);
+        }
+        foreach ($posts as $post) {
+            $this->assertDatabaseHas('blog_posts', [
+                'id' => $post->id,
+                'blog_category_id' => $replacement->id,
+            ]);
+        }
+    }
+
+    public function test_bulk_actions_reject_unavailable_actions_and_values(): void
+    {
+        $category = BlogCategory::factory()->create();
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.blog-categories.bulk'), [
+                'ids' => [$category->id],
+                'action' => 'publish_everything',
+            ])
+            ->assertSessionHasErrors('action');
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.blog-categories.bulk'), [
+                'ids' => [$category->id],
+                'action' => 'active',
+                'value' => 'invalid-state',
+            ])
+            ->assertSessionHasErrors('value');
+
+        $this->assertTrue($category->fresh()->is_active);
+    }
+
     public function test_rich_faqs_and_content_blocks_are_sanitized_and_reorderable(): void
     {
         $post = BlogPost::factory()->create();

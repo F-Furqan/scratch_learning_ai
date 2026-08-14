@@ -191,7 +191,12 @@ final class EditorialCmsAdminService
         }
 
         return match ($resource) {
-            'blog_categories', 'content_blocks', 'menu_items' => [
+            'blog_categories' => [
+                $this->bulkAction('active', 'Set Active State', $this->activeOptions()),
+                $this->bulkAction('reassign_delete', 'Reassign Posts And Delete', $this->categoryOptions()),
+                $this->bulkAction('delete', 'Delete'),
+            ],
+            'content_blocks', 'menu_items' => [
                 $this->bulkAction('active', 'Set Active State', $this->activeOptions()),
                 $this->bulkAction('delete', 'Delete'),
             ],
@@ -201,6 +206,27 @@ final class EditorialCmsAdminService
             ],
             default => [$this->bulkAction('delete', 'Delete')],
         };
+    }
+
+    /** @param array<string, mixed> $data */
+    public function validateBulk(string $resource, array $data): void
+    {
+        if ($resource !== 'blog_categories' || $data['action'] !== 'reassign_delete') {
+            return;
+        }
+
+        $targetId = (int) ($data['value'] ?? 0);
+        $selectedIds = array_map('intval', is_array($data['ids'] ?? null) ? $data['ids'] : []);
+
+        if ($targetId < 1 || in_array($targetId, $selectedIds, true)) {
+            throw ValidationException::withMessages([
+                'value' => 'Choose a replacement category that is not selected for deletion.',
+            ]);
+        }
+
+        if (! BlogCategory::query()->whereKey($targetId)->exists()) {
+            throw ValidationException::withMessages(['value' => 'The replacement category no longer exists.']);
+        }
     }
 
     /** @return array<string, int> */
@@ -270,6 +296,13 @@ final class EditorialCmsAdminService
             }
 
             $record->save();
+
+            return true;
+        }
+
+        if ($action === 'reassign_delete' && $record instanceof BlogCategory) {
+            $record->posts()->update(['blog_category_id' => (int) $value]);
+            $record->delete();
 
             return true;
         }
@@ -690,6 +723,16 @@ final class EditorialCmsAdminService
     private function blogOptions(): array
     {
         return BlogPost::query()->orderBy('title')->get(['id', 'title'])->map(fn (BlogPost $post): array => ['label' => $post->title, 'value' => $post->id])->all();
+    }
+
+    /** @return array<int, array{label: string, value: int}> */
+    private function categoryOptions(): array
+    {
+        return BlogCategory::query()
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (BlogCategory $category): array => ['label' => $category->name, 'value' => $category->id])
+            ->all();
     }
 
     /** @return array<int, array{label: string, value: int}> */

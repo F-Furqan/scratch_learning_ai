@@ -71,6 +71,10 @@ class HandleInertiaRequests extends Middleware
             'adminNavigation' => $user && $this->adminAccess->canAccess($user)
                 ? $this->adminNavigation->for($user)
                 : [],
+            'flash' => [
+                'success' => fn (): mixed => $request->session()->get('success'),
+                'error' => fn (): mixed => $request->session()->get('error'),
+            ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
+    AlertCircle,
     Check,
+    CircleCheck,
     Download,
     GripVertical,
     Pencil,
@@ -125,6 +127,7 @@ const props = defineProps<{
     ordering?: Ordering;
 }>();
 
+const page = usePage();
 const editingRow = ref<AdminRow | null>(null);
 const formOpen = ref(false);
 const formPanel = ref<HTMLElement | null>(null);
@@ -132,6 +135,7 @@ const selectedIds = ref<Array<number | string>>([]);
 const displayRows = ref<AdminRow[]>([...props.rows.data]);
 const draggedId = ref<number | string | null>(null);
 const orderingError = ref('');
+const actionError = ref('');
 const dynamicOptions = reactive<Record<string, Option[]>>(
     Object.fromEntries(
         props.fields.map((field) => [field.key, [...field.options]]),
@@ -173,6 +177,23 @@ const allVisibleSelected = computed(
 );
 
 const metricEntries = computed(() => Object.entries(props.metrics));
+const flashSuccess = computed(() => {
+    const flash = page.props.flash as
+        { success?: string | null; error?: string | null } | undefined;
+
+    return flash?.success || '';
+});
+const visibleActionError = computed(() => {
+    if (actionError.value) {
+        return actionError.value;
+    }
+
+    const flash = page.props.flash as
+        { success?: string | null; error?: string | null } | undefined;
+    const errors = page.props.errors as Record<string, string> | undefined;
+
+    return flash?.error || Object.values(errors || {})[0] || '';
+});
 const canCreate = computed(() => props.canCreate ?? true);
 const canEdit = computed(() => props.canEdit ?? true);
 const canDelete = computed(() => props.canDelete ?? true);
@@ -277,8 +298,12 @@ function deleteRow(row: AdminRow) {
         return;
     }
 
+    actionError.value = '';
     router.delete(`${props.basePath}/${row.id}`, {
         preserveScroll: true,
+        onError: (errors) => {
+            actionError.value = firstError(errors);
+        },
     });
 }
 
@@ -350,6 +375,16 @@ function runBulkAction() {
         return;
     }
 
+    if (
+        ['delete', 'reassign_delete'].includes(bulk.action) &&
+        !window.confirm(
+            `Delete ${selectedIds.value.length} selected record(s)?`,
+        )
+    ) {
+        return;
+    }
+
+    actionError.value = '';
     router.post(
         `${props.basePath}/bulk`,
         {
@@ -364,8 +399,15 @@ function runBulkAction() {
                 selectedIds.value = [];
                 bulk.note = '';
             },
+            onError: (errors) => {
+                actionError.value = firstError(errors);
+            },
         },
     );
+}
+
+function firstError(errors: Record<string, string>): string {
+    return Object.values(errors)[0] || 'The action could not be completed.';
 }
 
 function textValue(key: string) {
@@ -712,6 +754,24 @@ function workflowActionClass(action: WorkflowAction) {
             </div>
         </div>
 
+        <div
+            v-if="flashSuccess"
+            class="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+            role="status"
+        >
+            <CircleCheck class="mt-0.5 size-4 shrink-0" />
+            <span>{{ flashSuccess }}</span>
+        </div>
+
+        <div
+            v-if="visibleActionError"
+            class="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+            role="alert"
+        >
+            <AlertCircle class="mt-0.5 size-4 shrink-0" />
+            <span>{{ visibleActionError }}</span>
+        </div>
+
         <section class="rounded-lg border bg-card p-3">
             <form
                 class="grid gap-2 md:grid-cols-[1fr_repeat(4,minmax(130px,180px))_auto]"
@@ -814,10 +874,16 @@ function workflowActionClass(action: WorkflowAction) {
                 :disabled="
                     selectedIds.length === 0 ||
                     !bulk.action ||
-                    Boolean(selectedBulkAction?.options.length && !bulk.value)
+                    Boolean(
+                        selectedBulkAction?.options.length && !bulk.value,
+                    ) ||
+                    Boolean(selectedBulkAction?.needsNote && !bulk.note.trim())
                 "
                 :aria-disabled="
-                    Boolean(selectedBulkAction?.options.length && !bulk.value)
+                    Boolean(
+                        selectedBulkAction?.options.length && !bulk.value,
+                    ) ||
+                    Boolean(selectedBulkAction?.needsNote && !bulk.note.trim())
                 "
                 @click="runBulkAction"
             >

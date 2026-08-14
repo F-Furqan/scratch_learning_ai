@@ -110,6 +110,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Modules\Admin\Actions\BulkAdminResourceAction;
@@ -297,6 +298,7 @@ abstract class AdminOperationController extends Controller
     {
         $resource = $this->resource($request);
         $data = $request->validated();
+        $this->validateBulkAction($resource, $data);
 
         if ($this->operationsCenter->supports($resource)) {
             $this->operationsCenterActions->bulk($request, $resource, $data);
@@ -310,9 +312,19 @@ abstract class AdminOperationController extends Controller
             $this->courseCatalog->validateBulk($request, $resource, $data);
         }
 
+        if ($this->editorialCms->supports($resource)) {
+            $this->editorialCms->validateBulk($resource, $data);
+        }
+
         $records = $this->queryFactory->make($resource)
             ->whereKey($data['ids'])
             ->get();
+
+        if ($records->count() !== count(array_unique($data['ids']))) {
+            throw ValidationException::withMessages([
+                'ids' => 'One or more selected records no longer exist. Refresh the page and try again.',
+            ]);
+        }
 
         $this->bulkAction->execute(function () use ($request, $resource, $records, $data): void {
             foreach ($records as $record) {
@@ -342,6 +354,30 @@ abstract class AdminOperationController extends Controller
         });
 
         return back()->with('success', 'Bulk action completed.');
+    }
+
+    /** @param array<string, mixed> $data */
+    private function validateBulkAction(string $resource, array $data): void
+    {
+        $action = collect($this->bulkActionsFor($resource))
+            ->firstWhere('value', $data['action']);
+
+        if (! is_array($action)) {
+            throw ValidationException::withMessages(['action' => 'The selected bulk action is not available.']);
+        }
+
+        $options = collect($action['options'] ?? [])
+            ->pluck('value')
+            ->map(static fn (mixed $value): string => (string) $value)
+            ->all();
+
+        if ($options !== [] && ! in_array((string) ($data['value'] ?? ''), $options, true)) {
+            throw ValidationException::withMessages(['value' => 'Select a valid value for this action.']);
+        }
+
+        if (($action['needsNote'] ?? false) && blank($data['note'] ?? null)) {
+            throw ValidationException::withMessages(['note' => 'A review note is required for this action.']);
+        }
     }
 
     private function resource(Request $request): string
