@@ -91,12 +91,14 @@ class EditorialCmsManagementTest extends TestCase
         );
 
         $category = BlogCategory::query()->firstOrFail();
-        BlogPost::factory()->create(['blog_category_id' => $category->id]);
+        $post = BlogPost::factory()->create(['blog_category_id' => $category->id]);
 
         $this->actingAs($this->admin)
             ->delete(route('admin.blog-categories.destroy', $category))
-            ->assertSessionHasErrors('delete');
-        $this->assertDatabaseHas('blog_categories', ['id' => $category->id]);
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
+        $this->assertDatabaseMissing('blog_categories', ['id' => $category->id]);
+        $this->assertNull($post->fresh()->blog_category_id);
     }
 
     public function test_blog_tags_support_single_and_atomic_bulk_deletion(): void
@@ -129,21 +131,22 @@ class EditorialCmsManagementTest extends TestCase
 
     public function test_protected_bulk_deletion_rolls_back_every_selected_record(): void
     {
-        $unused = BlogCategory::factory()->create();
-        $inUse = BlogCategory::factory()->create();
-        BlogPost::factory()->create(['blog_category_id' => $inUse->id]);
+        $menu = Menu::factory()->create();
+        $unused = MenuItem::factory()->for($menu)->create();
+        $parent = MenuItem::factory()->for($menu)->create();
+        MenuItem::factory()->for($menu)->create(['parent_id' => $parent->id]);
 
         $this->actingAs($this->admin)
-            ->from('/admin/blog-categories')
-            ->post(route('admin.blog-categories.bulk'), [
-                'ids' => [$unused->id, $inUse->id],
+            ->from('/admin/menus/items')
+            ->post(route('admin.menus.items.bulk'), [
+                'ids' => [$unused->id, $parent->id],
                 'action' => 'delete',
             ])
             ->assertSessionHasErrors('delete')
-            ->assertRedirect('/admin/blog-categories');
+            ->assertRedirect('/admin/menus/items');
 
-        $this->assertDatabaseHas('blog_categories', ['id' => $unused->id]);
-        $this->assertDatabaseHas('blog_categories', ['id' => $inUse->id]);
+        $this->assertDatabaseHas('menu_items', ['id' => $unused->id]);
+        $this->assertDatabaseHas('menu_items', ['id' => $parent->id]);
     }
 
     public function test_blog_categories_can_reassign_posts_before_bulk_deletion(): void

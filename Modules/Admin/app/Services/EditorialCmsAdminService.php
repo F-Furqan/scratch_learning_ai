@@ -314,10 +314,6 @@ final class EditorialCmsAdminService
     {
         abort_if($this->readOnly($resource), 405, 'History records cannot be deleted here.');
 
-        if ($record instanceof BlogCategory && $record->posts()->exists()) {
-            throw ValidationException::withMessages(['delete' => 'Reassign this category’s blog posts before deleting it.']);
-        }
-
         if ($record instanceof MenuItem && $record->children()->exists()) {
             throw ValidationException::withMessages(['delete' => 'Move or delete child menu items first.']);
         }
