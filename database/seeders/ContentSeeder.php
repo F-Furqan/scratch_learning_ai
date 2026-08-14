@@ -643,7 +643,7 @@ class ContentSeeder extends Seeder
         $tags = [];
 
         foreach ($categoryDefinitions as $slug => $description) {
-            $categories[$slug] = BlogCategory::query()->updateOrCreate(
+            $categories[$slug] = BlogCategory::query()->firstOrCreate(
                 ['slug' => $slug],
                 [
                     'name' => str($slug)->replace('-', ' ')->title(),
