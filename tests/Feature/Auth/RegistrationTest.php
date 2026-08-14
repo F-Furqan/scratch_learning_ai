@@ -118,6 +118,24 @@ class RegistrationTest extends TestCase
         $this->assertTrue($user->fresh()->hasAcceptedCreatorAgreement());
     }
 
+    public function test_registration_ignores_a_stale_intended_admin_destination()
+    {
+        $response = $this
+            ->withSession(['url.intended' => route('admin.dashboard', absolute: false)])
+            ->post(route('register.store'), [
+                'name' => 'Redirect Safe Student',
+                'email' => 'redirect-safe-student@example.com',
+                'account_type' => 'student',
+                'password' => 'password',
+                'password_confirmation' => 'password',
+            ]);
+
+        $response->assertRedirect(route('dashboard', absolute: false));
+
+        $this->get(route('dashboard'))
+            ->assertRedirect(route('student.dashboard', absolute: false));
+    }
+
     public function test_creator_registration_requires_creator_agreement_acceptance()
     {
         $response = $this->post(route('register.store'), [
